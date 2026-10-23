@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/tts.job.json",
+  "title": "tts.jobs.v1",
+  "description": "Запрос на синтез речи. Кэш по хэшу text+voice+format.",
+  "allOf": [
+    { "$ref": "./envelope.json" },
+    {
+      "properties": {
+        "job_type": { "const": "tts" },
+        "payload": { "$ref": "#/$defs/payload" }
+      },
+      "required": ["job_type", "payload"]
+    }
+  ],
+  "$defs": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "voice", "format"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "voice": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "default": "default"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["mp3", "ogg"]
+        }
+      }
+    }
+  }
+}

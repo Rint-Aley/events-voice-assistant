@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/stt.response.json",
+  "title": "STT response",
+  "description": "stt -> TaskManager. 200 на POST /v1/transcribe. Тишина в записи — не ошибка: empty = true, text = \"\".",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["turn_id", "text", "language", "confidence", "empty", "duration_ms", "provider"],
+  "properties": {
+    "turn_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Распознанный текст. Пустая строка только при empty = true."
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Уверенность распознавания. При empty = true не значима."
+    },
+    "empty": {
+      "type": "boolean",
+      "description": "true — речи в записи нет. TaskManager закрывает ход кодом EMPTY_TRANSCRIPT без ретраев."
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 120000
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Кто распознал: yandex, whisper, local."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"empty": {"const": true}},
+        "required": ["empty"]
+      },
+      "then": {
+        "properties": {"text": {"maxLength": 0}}
+      },
+      "else": {
+        "properties": {"text": {"minLength": 1}}
+      }
+    }
+  ]
+}

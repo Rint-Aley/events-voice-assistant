@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/dlq.json",
+  "title": "<service>.dlq.v1",
+  "description": "Сообщение, которое не удалось обработать за отведённое число попыток. Содержит исходное сообщение целиком плюс причину.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "message_id", "failed_at", "service", "error", "original"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "message_id": { "type": "string", "format": "uuid" },
+    "failed_at": { "type": "string", "format": "date-time" },
+    "service": { "type": "string", "enum": ["stt", "nlu", "tts"] },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "SCHEMA_INVALID",
+            "PROVIDER_TIMEOUT",
+            "PROVIDER_ERROR",
+            "AUDIO_UNREADABLE",
+            "EMPTY_TRANSCRIPT",
+            "INTERNAL"
+          ]
+        },
+        "message": { "type": "string", "maxLength": 2000 },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "original": {
+      "type": "object",
+      "description": "Исходное сообщение в конверте, как было получено."
+    }
+  }
+}

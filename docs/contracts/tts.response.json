@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/tts.response.json",
+  "title": "TTS response",
+  "description": "tts -> TaskManager. 200 на POST /v1/synthesize. Блоб не передаётся: только ключ объекта в S3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answer_id", "object_key", "content_type", "format", "duration_ms", "cached"],
+  "properties": {
+    "answer_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "object_key": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^tts/[0-9a-f]{64}\\.(opus|mp3|wav)$",
+      "description": "Детерминированный ключ: sha256(text + voice) и расширение формата."
+    },
+    "content_type": {
+      "type": "string",
+      "enum": ["audio/ogg", "audio/mpeg", "audio/wav"]
+    },
+    "format": {
+      "type": "string",
+      "enum": ["ogg_opus", "mp3", "wav"]
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 300000
+    },
+    "cached": {
+      "type": "boolean",
+      "description": "true — объект уже был, синтез не выполнялся."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"format": {"const": "ogg_opus"}},
+        "required": ["format"]
+      },
+      "then": {
+        "properties": {
+          "object_key": {"pattern": "^tts/[0-9a-f]{64}\\.opus$"},
+          "content_type": {"const": "audio/ogg"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"format": {"const": "mp3"}},
+        "required": ["format"]
+      },
+      "then": {
+        "properties": {
+          "object_key": {"pattern": "^tts/[0-9a-f]{64}\\.mp3$"},
+          "content_type": {"const": "audio/mpeg"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"format": {"const": "wav"}},
+        "required": ["format"]
+      },
+      "then": {
+        "properties": {
+          "object_key": {"pattern": "^tts/[0-9a-f]{64}\\.wav$"},
+          "content_type": {"const": "audio/wav"}
+        }
+      }
+    }
+  ]
+}

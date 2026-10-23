@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/stt.request.json",
+  "title": "STT request",
+  "description": "TaskManager -> stt. POST /v1/transcribe. Аудио не передаётся телом: только presigned GET.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["turn_id", "audio_url", "content_type", "language"],
+  "properties": {
+    "turn_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Ключ идемпотентности и корреляции. Повтор с тем же turn_id допустим."
+    },
+    "audio_url": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048,
+      "description": "Presigned GET на объект в S3. Живёт не дольше 15 минут."
+    },
+    "content_type": {
+      "type": "string",
+      "enum": ["audio/webm", "audio/ogg", "audio/wav", "audio/mpeg"],
+      "description": "Тот же content_type, с которым клиент загрузил файл."
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+      "description": "Язык распознавания: ru, en, en-US."
+    },
+    "max_duration_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 120000,
+      "description": "Верхняя граница длительности; запись длиннее — 422 AUDIO_TOO_LONG."
+    }
+  }
+}

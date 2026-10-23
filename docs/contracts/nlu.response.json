@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/nlu.response.json",
+  "title": "NLU response",
+  "description": "nlu -> TaskManager. 200 на POST /v1/interpret. План действия, нормализованные сущности и эмбеддинг.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["turn_id", "action", "confidence", "embedding"],
+  "properties": {
+    "turn_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "create_task",
+        "create_reminder",
+        "create_meeting",
+        "list_period",
+        "search",
+        "clarify",
+        "unknown"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Уверенность в плане. Ниже порога TaskManager может переспросить, не дожидаясь clarify."
+    },
+    "entities": {
+      "$ref": "#/$defs/entities"
+    },
+    "missing": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["description", "datetime", "time", "query"]
+      },
+      "description": "Чего не хватает для выполнения действия. Только при clarify."
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "Текст уточняющего вопроса. Только при clarify."
+    },
+    "embedding": {
+      "description": "Вектор смысла. null допустим только когда эмбеддить нечего: нет описания и запрос не поисковый.",
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/embedding"}
+      ]
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Модель, построившая план. Модель эмбеддинга — в embedding.model."
+    }
+  },
+  "allOf": [
+    {
+      "description": "Создание требует сущностей: действие без них нечего применять. Само описание при этом необязательно.",
+      "if": {
+        "properties": {"action": {"enum": ["create_task", "create_reminder", "create_meeting"]}},
+        "required": ["action"]
+      },
+      "then": {
+        "required": ["entities"]
+      }
+    },
+    {
+      "description": "Нет описания — нет и вектора. Запись создаётся, но в семантическом поиске не участвует.",
+      "if": {
+        "required": ["action", "entities"],
+        "properties": {
+          "action": {"enum": ["create_task", "create_reminder", "create_meeting"]},
+          "entities": {"not": {"required": ["description"]}}
+        }
+      },
+      "then": {
+        "properties": {"embedding": {"type": "null"}}
+      }
+    },
+    {
+      "description": "Выборка за период требует обе границы.",
+      "if": {
+        "properties": {"action": {"const": "list_period"}},
+        "required": ["action"]
+      },
+      "then": {
+        "required": ["entities"],
+        "properties": {"entities": {"required": ["period_from", "period_to"]}}
+      }
+    },
+    {
+      "description": "Поиск по смыслу невозможен без запроса и его вектора.",
+      "if": {
+        "properties": {"action": {"const": "search"}},
+        "required": ["action"]
+      },
+      "then": {
+        "required": ["entities", "embedding"],
+        "properties": {
+          "entities": {"required": ["query"]},
+          "embedding": {"type": "object"}
+        }
+      }
+    },
+    {
+      "description": "Уточнение обязано назвать, чего не хватает, и задать вопрос.",
+      "if": {
+        "properties": {"action": {"const": "clarify"}},
+        "required": ["action"]
+      },
+      "then": {
+        "required": ["missing", "question"]
+      }
+    },
+    {
+      "description": "«Не понял» не несёт сущностей.",
+      "if": {
+        "properties": {"action": {"const": "unknown"}},
+        "required": ["action"]
+      },
+      "then": {
+        "not": {"required": ["entities"]}
+      }
+    },
+    {
+      "description": "Описание и вектор идут парой: есть описание — есть и вектор.",
+      "if": {
+        "required": ["entities"],
+        "properties": {"entities": {"required": ["description"]}}
+      },
+      "then": {
+        "properties": {"embedding": {"type": "object"}}
+      }
+    },
+    {
+      "description": "Время без даты не нормализуется: «в 10» непонятно к какому дню.",
+      "if": {
+        "properties": {"entities": {"required": ["starts_at"]}},
+        "required": ["entities"]
+      },
+      "then": {
+        "properties": {"entities": {"required": ["starts_on"]}}
+      }
+    }
+  ],
+  "$defs": {
+    "entities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Что сделать: «позвонить Ивану», «обсудить релиз»."
+        },
+        "starts_on": {
+          "type": "string",
+          "format": "date",
+          "description": "Локальная дата пользователя."
+        },
+        "starts_at": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+          "description": "Локальное время пользователя, HH:MM. Зона берётся из timezone запроса."
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 1440
+        },
+        "period_from": {
+          "type": "string",
+          "format": "date",
+          "description": "Начало периода включительно."
+        },
+        "period_to": {
+          "type": "string",
+          "format": "date",
+          "description": "Конец периода включительно."
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Поисковая фраза как её сказал пользователь."
+        }
+      }
+    },
+    "embedding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "dim", "values"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "dim": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192,
+          "description": "Размерность модели. Обязана совпадать с длиной values — проверяет потребитель."
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8192,
+          "items": {"type": "number"}
+        }
+      }
+    }
+  }
+}

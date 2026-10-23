@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/nlu.job.json",
+  "title": "nlu.jobs.v1",
+  "description": "Запрос на разбор текста в план действий. reference_datetime передаёт бэкенд: модель не определяет 'сегодня' самостоятельно.",
+  "allOf": [
+    { "$ref": "./envelope.json" },
+    {
+      "properties": {
+        "job_type": { "const": "nlu" },
+        "payload": { "$ref": "#/$defs/payload" }
+      },
+      "required": ["job_type", "payload"]
+    }
+  ],
+  "$defs": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "reference_datetime", "timezone", "pending_draft", "recent_items"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "reference_datetime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Текущий момент с офсетом, например 2026-10-22T18:30:00+03:00."
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "examples": ["Europe/Moscow"]
+        },
+        "pending_draft": {
+          "type": ["object", "null"],
+          "description": "Черновик незавершённого действия из предыдущего хода (уточняющий диалог). Структура — TBD владельцем TaskManager."
+        },
+        "recent_items": {
+          "type": "array",
+          "maxItems": 10,
+          "description": "Короткий контекст для запросов вида 'перенеси её'.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "kind", "title", "scheduled_at"],
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "kind": { "type": "string", "enum": ["task", "reminder", "meeting"] },
+              "title": { "type": "string", "maxLength": 500 },
+              "scheduled_at": { "type": ["string", "null"], "format": "date-time" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

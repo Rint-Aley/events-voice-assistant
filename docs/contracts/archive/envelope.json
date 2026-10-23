@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/envelope.json",
+  "title": "MessageEnvelope",
+  "description": "Общий конверт любого сообщения в брокере. Транспорт-агностичен: не содержит полей, специфичных для Kafka/Redpanda.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "message_id",
+    "job_type",
+    "turn_id",
+    "session_id",
+    "user_id",
+    "attempt",
+    "created_at",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Версия контракта. Несовпадение мажора у консьюмера — сообщение в DLQ."
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Идентификатор сообщения. Генерируется продюсером один раз, при ретрае не меняется."
+    },
+    "job_type": {
+      "type": "string",
+      "enum": ["stt", "nlu", "tts"]
+    },
+    "turn_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Идентификатор хода диалога. Ключ идемпотентности результата."
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Ключ партиции. Гарантирует порядок сообщений внутри сессии."
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3,
+      "description": "Номер попытки. Инкрементит продюсер при повторной публикации."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Тело конкретного job_type, схема — в соответствующем *.job.json / *.result.json."
+    }
+  }
+}

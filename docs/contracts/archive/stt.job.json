@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/stt.job.json",
+  "title": "stt.jobs.v1",
+  "description": "Запрос на распознавание речи. Аудио не передаётся: только ключ объекта и presigned-ссылка.",
+  "allOf": [
+    { "$ref": "./envelope.json" },
+    {
+      "properties": {
+        "job_type": { "const": "stt" },
+        "payload": { "$ref": "#/$defs/payload" }
+      },
+      "required": ["job_type", "payload"]
+    }
+  ],
+  "$defs": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["object_key", "audio_url", "content_type", "language", "max_duration_ms"],
+      "properties": {
+        "object_key": {
+          "type": "string",
+          "pattern": "^audio/",
+          "maxLength": 512
+        },
+        "audio_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Presigned GET, TTL 15 минут. Сервису stt креды к S3 не нужны."
+        },
+        "content_type": {
+          "type": "string",
+          "enum": ["audio/webm", "audio/ogg", "audio/wav", "audio/mpeg"]
+        },
+        "language": {
+          "type": "string",
+          "const": "ru"
+        },
+        "max_duration_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 60000
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/stt.result.json",
+  "title": "stt.results.v1",
+  "description": "Результат распознавания. empty=true — валидный исход (тишина), не ошибка.",
+  "allOf": [
+    { "$ref": "./envelope.json" },
+    {
+      "properties": {
+        "job_type": { "const": "stt" },
+        "payload": { "$ref": "#/$defs/payload" }
+      },
+      "required": ["job_type", "payload"]
+    }
+  ],
+  "$defs": {
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "language", "duration_ms", "confidence", "empty"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Пустая строка допустима только при empty=true."
+        },
+        "language": {
+          "type": "string",
+          "const": "ru"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "empty": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

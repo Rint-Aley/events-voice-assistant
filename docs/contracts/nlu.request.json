@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://todo-agent.local/contracts/nlu.request.json",
+  "title": "NLU request",
+  "description": "TaskManager -> nlu. POST /v1/interpret. Текст уже распознан или введён пользователем.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["turn_id", "text", "now", "timezone"],
+  "properties": {
+    "turn_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Ключ идемпотентности и корреляции."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "now": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Текущий момент с offset (2026-10-23T14:05:00+03:00). Нужен для «завтра», «в пятницу», «через час»."
+    },
+    "timezone": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "IANA-зона пользователя: Europe/Moscow."
+    },
+    "draft": {
+      "description": "Незаполненные слоты предыдущего хода. null — уточнения не было.",
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/draft"}
+      ]
+    }
+  },
+  "$defs": {
+    "draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "Только те слоты, которые уже известны. Пустой объект запрещён: незачем передавать пустоту.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["task", "reminder", "meeting"]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "starts_on": {
+          "type": "string",
+          "format": "date",
+          "description": "Локальная дата пользователя."
+        },
+        "starts_at": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+          "description": "Локальное время пользователя, HH:MM. Зона берётся из timezone."
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 1440
+        }
+      }
+    }
+  }
+}
