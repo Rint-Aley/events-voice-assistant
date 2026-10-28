@@ -1,6 +1,6 @@
 # Архитектура: голосовой ассистент для задач и встреч
 
-**Версия:** 0.8
+**Версия:** 0.9
 **Статус:** контракты зафиксированы (HTTP, версия 2), реализации описываются владельцами сервисов
 **Формат работы:** SDD (spec-driven development), contract-first
 **Рамки:** MVP для показа жюри хакатона
@@ -17,6 +17,7 @@
 
 Смежные документы:
 
+- `docs/README.md` — карта документации: что где искать и в каком порядке читать;
 - `docs/contracts/` — нормативные HTTP-контракты между компонентами: схемы
   `stt`/`nlu`/`tts`, общая ошибка, контракт web ↔ TaskManager;
 - `docs/for_investigation.md` — всё, что ещё не решено: нефункциональные требования,
@@ -67,7 +68,7 @@ TaskManager сохраняет его рядом с созданной запи�
 |---|---|---|
 | `web` | запись, отправка, история диалога, плеер | `docs/web.md` |
 | `TaskManager` | HTTP/SSE, оркестрация, данные, сборка ответа | `docs/task-manager.md` |
-| `TaskManager/fsm` | ход диалога, состояния, переходы, джобы | `docs/task-manager.md` |
+| `TaskManager/fsm` | ход диалога, состояния, переходы, фоновые задачи | `docs/task-manager.md` |
 | `TaskManager/domain` | операции над `events`, валидация, поиск | `docs/task-manager.md` |
 | `stt` | аудио → текст | `docs/stt.md` |
 | `nlu` | текст → план действия + эмбеддинг | `docs/nlu.md` |
@@ -76,8 +77,9 @@ TaskManager сохраняет его рядом с созданной запи�
 
 **Деплой-юниты:** `web`, `TaskManager`, `stt`, `nlu`, `tts` + инфраструктура.
 
-TaskManager — **один** деплой-юнит, внутри модульный монолит (`http`, `fsm`, `domain`, `jobs`,
-`sse`), разделённый интерфейсами, а не сетью. Смысл: не платить за сеть там, где нужна
+TaskManager — **один** деплой-юнит. Внутри два модуля (`fsm`, `domain`) и три адаптера
+(`http`, `clients`, `storage`), разделённые портами, а не сетью. Планировщик фоновых задач —
+внутренняя библиотека `fsm`, а не адаптер. Смысл границы: не платить за сеть там, где нужна
 транзакционная согласованность обновления хода и записи в `events`.
 
 Раскладка репозитория:
@@ -408,26 +410,42 @@ created_at, updated_at
 
 ---
 
-## 8. Граница модулей внутри TaskManager
+## 8. Граница модулей и адаптеров
 
-Один процесс, модули `http`, `fsm`, `domain`, `jobs`, `sse`; зависимости строго в одну
-сторону: `http → fsm → domain`, `fsm → jobs`, `fsm → sse`.
+Один процесс: два модуля и три адаптера. Импорты строго в одну сторону —
+`adapters → fsm → domain`, то есть `http`, `clients`, `storage` → `fsm` → `domain`.
+
+| Единица | Тип | Роль |
+|---|---|---|
+| `fsm` | модуль | состояния, переходы, транзакции, политика фоновых задач |
+| `domain` | модуль | `events`, валидация, поиск, pgvector |
+| `http` | адаптер | вход: маршруты, коды ответов, SSE-фрейминг, хаб подписок |
+| `clients` | адаптер | выход: HTTP-вызовы `stt`/`nlu`/`tts` |
+| `storage` | адаптер | выход: presigned URL и ключи S3 |
+
+Планировщик фоновых задач — библиотека внутри `fsm`. Адаптером он не считается: обслуживает
+собственный процесс, а не внешнюю систему, и в чужие таблицы не пишет.
 
 ```python
 class TodoDomain(Protocol):
-    def create(self, cmd: CreateEvent) -> Event: ...
-    def list_period(self, q: PeriodQuery) -> list[Event]: ...
-    def search(self, q: SearchQuery) -> list[Event]: ...
-    def update(self, cmd: UpdateEvent) -> Event: ...
-    def complete(self, event_id: UUID) -> Event: ...
-    def delete(self, event_id: UUID) -> None: ...
+    # tx открывает и коммитит fsm; домен в неё только пишет
+    def create(self, tx, cmd: CreateEvent) -> Event: ...
+    def list_period(self, tx, q: PeriodQuery) -> list[Event]: ...
+    def search(self, tx, q: SearchQuery) -> list[Event]: ...
+    def update(self, tx, cmd: UpdateEvent) -> Event: ...
+    def complete(self, tx, event_id: UUID) -> Event: ...
+    def delete(self, tx, event_id: UUID) -> None: ...
 ```
 
 Правила:
 
-- `domain` не импортирует `fsm`, не знает про HTTP, SSE и фоновые задачи, ничего не
-  публикует.
-- `fsm` не пишет в `events` напрямую и не строит SQL.
+- `domain` не импортирует `fsm`, не знает про HTTP, SSE, адаптеры и фоновые задачи, ничего
+  не публикует.
+- `fsm` не импортирует конкретные адаптеры: он объявляет порты, адаптеры их реализуют.
+  В рантайме вызовы идут в обе стороны через порты, импорт — только в одну.
+- `fsm` не пишет в `events` напрямую и не строит SQL по таблицам `domain`.
+- Только `fsm` открывает и коммитит транзакции; `domain` принимает уже открытую.
+- Адаптеры не содержат доменных правил, не пишут SQL и не открывают транзакции.
 - Транспорт (HTTP/SSE) — тонкий слой над `fsm`.
 - Домен возвращает типизированные ошибки (`EventNotFound`, `InvalidPeriod`,
   `TitleRequired`, `TimeInPast`), `fsm` решает, как их превратить в ответ пользователю.
@@ -468,6 +486,7 @@ class TodoDomain(Protocol):
 | 0.6 | 2026-10-23 | Для MVP брокер и outbox заменены на HTTP-вызовы из фоновой задачи; очередь — таблица `jobs` в Postgres; сценарий с брокером перенесён в `for_investigation.md` |
 | 0.7 | 2026-10-23 | Добавлена спека `docs/task-manager.md`; `items` → `events`; `jobs` заменены планировщиком + `domain_commands`; FSM перенесена из `for_investigation.md` в спеку |
 | 0.8 | 2026-10-24 | Контракты переведены на HTTP: схемы `stt`/`nlu`/`tts` и общая ошибка; брокерные схемы перенесены в `docs/contracts/archive/` |
+| 0.9 | 2026-10-27 | Явно разделены модули (`fsm`, `domain`) и адаптеры (`http`, `clients`, `storage`); планировщик — внутренняя библиотека `fsm` |
 
 ---
 
