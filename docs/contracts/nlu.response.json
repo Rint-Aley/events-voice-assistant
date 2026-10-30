@@ -79,7 +79,7 @@
       }
     },
     {
-      "description": "Нет описания — нет и вектора. Запись создаётся, но в семантическом поиске не участвует.",
+      "description": "Нет описания — нет и вектора. TaskManager не создаёт запись: заголовок обязателен, поэтому ход уходит в clarify.",
       "if": {
         "required": ["action", "entities"],
         "properties": {
@@ -198,6 +198,15 @@
           "minLength": 1,
           "maxLength": 500,
           "description": "Поисковая фраза как её сказал пользователь."
+        },
+        "type_filter": {
+          "type": "string",
+          "enum": ["meeting", "task", "reminder"],
+          "description": "Необязательный фильтр для list_period/search. meeting — только встречи; task — задачи и напоминания; reminder — только напоминания. Отсутствует — все типы."
+        },
+        "is_deadline": {
+          "type": "boolean",
+          "description": "Только для task: дата означает дедлайн «сделать до». Отсутствует — false."
         }
       }
     },
