@@ -9,4 +9,5 @@ namespace TaskManager.Turns.Application.Scenarios;
 public sealed record InterpretTurnResult(
     Guid TurnId,
     TurnState State,
-    TurnIntent? Intent);
+    TurnIntent? Intent,
+    Guid? AnswerId = null);

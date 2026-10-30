@@ -143,7 +143,9 @@ public sealed class Answer
             return Result.Failure(AnswerErrors.AudioObjectKeyRequired);
         }
 
-        if (audioDurationMs <= 0)
+        // Контракт tts.response допускает duration_ms = 0: длительность может быть
+        // неизвестна, но объект уже создан и озвучка готова.
+        if (audioDurationMs < 0)
         {
             return Result.Failure(AnswerErrors.AudioDurationInvalid);
         }
@@ -207,7 +209,7 @@ public sealed class Answer
             return Result<Answer>.Failure(AnswerErrors.AudioStatusInvalid);
         }
 
-        if (audioDurationMs <= 0)
+        if (audioDurationMs < 0)
         {
             return Result<Answer>.Failure(AnswerErrors.AudioDurationInvalid);
         }

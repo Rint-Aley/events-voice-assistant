@@ -1,8 +1,12 @@
 using System.Globalization;
 using System.Text.Json;
 using TaskManager.Application.Abstractions;
+using TaskManager.Events.Application.Queries;
+using TaskManager.Events.Application.Scenarios;
+using TaskManager.Events.Domain;
 using TaskManager.SharedKernel;
 using TaskManager.Turns.Application.Clients.Nlu;
+using TaskManager.Turns.Application.Plans;
 using TaskManager.Turns.Application.Ports;
 using TaskManager.Turns.Domain;
 
@@ -21,7 +25,10 @@ public sealed class InterpretTurnHandler
     private readonly ITurnRepository _turns;
     private readonly IDraftRepository _drafts;
     private readonly IAnswerRepository _answers;
+    private readonly IDomainCommandRepository _commands;
     private readonly INluClient _nlu;
+    private readonly ListPeriodHandler _listPeriod;
+    private readonly IJobScheduler _scheduler;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -29,14 +36,20 @@ public sealed class InterpretTurnHandler
         ITurnRepository turns,
         IDraftRepository drafts,
         IAnswerRepository answers,
+        IDomainCommandRepository commands,
         INluClient nlu,
+        ListPeriodHandler listPeriod,
+        IJobScheduler scheduler,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
         _turns = turns;
         _drafts = drafts;
         _answers = answers;
+        _commands = commands;
         _nlu = nlu;
+        _listPeriod = listPeriod;
+        _scheduler = scheduler;
         _unitOfWork = unitOfWork;
         _clock = clock;
     }
@@ -91,6 +104,14 @@ public sealed class InterpretTurnHandler
 
             await _unitOfWork.CommitAsync(cancellationToken);
 
+            // Применение команд плана записи — отдельный сценарий. Немедленную попытку
+            // после коммита и страховочный тик запускает планировщик (задача Quartz),
+            // поэтому здесь фиксируются только plan и domain_commands в APPLYING.
+            if (applied.Value.AnswerId is { } answerId)
+            {
+                await _scheduler.ScheduleAsync(JobKind.Tts, answerId, cancellationToken);
+            }
+
             return applied;
         }
         catch
@@ -135,7 +156,18 @@ public sealed class InterpretTurnHandler
             await RemoveDraftAsync(previous!, previousDraft, cancellationToken);
         }
 
-        if (intent.Value is TurnIntent.ListPeriod or TurnIntent.Search or TurnIntent.Unknown)
+        if (intent.Value is TurnIntent.ListPeriod)
+        {
+            return await ApplyReadPlanAsync(
+                turn,
+                plan,
+                intent.Value,
+                response.Entities,
+                now,
+                cancellationToken);
+        }
+
+        if (intent.Value is TurnIntent.Search or TurnIntent.Unknown)
         {
             TurnTransition transition = intent.Value == TurnIntent.Unknown
                 ? TurnTransition.NotUnderstood
@@ -153,7 +185,33 @@ public sealed class InterpretTurnHandler
                 await RemoveDraftAsync(previous!, previousDraft, cancellationToken);
             }
 
-            return ApplyPlan(turn, TurnTransition.WritePlan, plan, intent.Value, now);
+            Result<InterpretTurnResult> written = ApplyPlan(
+                turn,
+                TurnTransition.WritePlan,
+                plan,
+                intent.Value,
+                now);
+
+            if (written.IsFailure)
+            {
+                return written;
+            }
+
+            Result<DomainCommand> command = BuildEventCreateCommand(
+                turn,
+                interpretation,
+                response.Embedding,
+                previousDraft,
+                now);
+
+            if (command.IsFailure)
+            {
+                return Result<InterpretTurnResult>.Failure(command.Error!);
+            }
+
+            await _commands.AddAsync(command.Value, cancellationToken);
+
+            return written;
         }
 
         // Два раунда вопросов уже заданы: третий ответ завершает ход, черновик удаляется.
@@ -174,7 +232,7 @@ public sealed class InterpretTurnHandler
 
             await RemoveDraftAsync(previous!, previousDraft, cancellationToken);
 
-            Result answered = await AddAnswerAsync(
+            Result<Answer> answered = await AddAnswerAsync(
                 turn,
                 TurnMessages.ClarificationExhausted,
                 now,
@@ -182,7 +240,8 @@ public sealed class InterpretTurnHandler
 
             return answered.IsFailure
                 ? Result<InterpretTurnResult>.Failure(answered.Error!)
-                : completed;
+                : Result<InterpretTurnResult>.Success(
+                    completed.Value with { AnswerId = answered.Value.Id });
         }
 
         Result<InterpretTurnResult> clarified = ApplyPlan(
@@ -218,7 +277,7 @@ public sealed class InterpretTurnHandler
 
         await _drafts.AddAsync(draft.Value, cancellationToken);
 
-        Result answer = await AddAnswerAsync(
+        Result<Answer> answer = await AddAnswerAsync(
             turn,
             interpretation.Question ?? TurnMessages.DescriptionQuestion,
             now,
@@ -226,7 +285,8 @@ public sealed class InterpretTurnHandler
 
         return answer.IsFailure
             ? Result<InterpretTurnResult>.Failure(answer.Error!)
-            : clarified;
+            : Result<InterpretTurnResult>.Success(
+                clarified.Value with { AnswerId = answer.Value.Id });
     }
 
     private static Result<InterpretTurnResult> ApplyPlan(
@@ -244,6 +304,119 @@ public sealed class InterpretTurnHandler
                 new InterpretTurnResult(turn.Id, turn.State, intent));
     }
 
+    private async Task<Result<InterpretTurnResult>> ApplyReadPlanAsync(
+        Turn turn,
+        string plan,
+        TurnIntent intent,
+        NluEntities? entities,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        // Без валидного периода план list_period неполон: это невалидный контракт NLU,
+        // а не пустой успешный список. Ход закрывается NLU_FAILED, ответа и TTS нет.
+        if (!TryParsePeriod(entities, out DateOnly from, out DateOnly to))
+        {
+            return await FailNluAsync(turn, now);
+        }
+
+        // Неизвестный type_filter — тоже нарушение контракта, а не «все типы».
+        if (!TryParseTypeFilter(entities?.TypeFilter, out EventTypeFilter? typeFilter))
+        {
+            return await FailNluAsync(turn, now);
+        }
+
+        // Перевёрнутый период — ошибка данных, а не ошибка сценария: завершаем ход
+        // просьбой переформулировать, чтобы он не завис в INTERPRETING.
+        if (to < from)
+        {
+            Result<InterpretTurnResult> notUnderstood = ApplyPlan(
+                turn,
+                TurnTransition.NotUnderstood,
+                plan,
+                intent,
+                now);
+
+            if (notUnderstood.IsFailure)
+            {
+                return notUnderstood;
+            }
+
+            Result<Answer> refusal = await AddAnswerAsync(
+                turn,
+                TurnMessages.ClarificationExhausted,
+                now,
+                cancellationToken);
+
+            return refusal.IsFailure
+                ? Result<InterpretTurnResult>.Failure(refusal.Error!)
+                : Result<InterpretTurnResult>.Success(
+                    notUnderstood.Value with { AnswerId = refusal.Value.Id });
+        }
+
+        Result<ListPeriodResult> list = await _listPeriod.HandleAsync(
+            new ListPeriodQuery(from, to, typeFilter),
+            cancellationToken);
+
+        if (list.IsFailure)
+        {
+            return Result<InterpretTurnResult>.Failure(list.Error!);
+        }
+
+        DateOnly today = DateOnly.FromDateTime(_clock.LocalNow.DateTime);
+        string text = AnswerText.List(
+            typeFilter,
+            from,
+            to,
+            today,
+            list.Value.Events,
+            list.Value.TotalCount);
+
+        Result<Answer> answer = Answer.Create(
+            turn.Id,
+            text,
+            now,
+            totalCount: list.Value.TotalCount);
+
+        if (answer.IsFailure)
+        {
+            return Result<InterpretTurnResult>.Failure(answer.Error!);
+        }
+
+        Result<InterpretTurnResult> completed = ApplyPlan(
+            turn,
+            TurnTransition.ReadPlan,
+            plan,
+            intent,
+            now);
+
+        if (completed.IsFailure)
+        {
+            return completed;
+        }
+
+        await _answers.AddAsync(answer.Value, cancellationToken);
+
+        short position = 0;
+        foreach (var @event in list.Value.Events)
+        {
+            Result<AnswerEvent> link = AnswerEvent.Create(
+                answer.Value.Id,
+                @event.Id,
+                position);
+
+            if (link.IsFailure)
+            {
+                return Result<InterpretTurnResult>.Failure(link.Error!);
+            }
+
+            await _answers.AddEventAsync(link.Value, cancellationToken);
+            position++;
+        }
+
+        return Result<InterpretTurnResult>.Success(
+            completed.Value with { AnswerId = answer.Value.Id });
+    }
+
     private static Task<Result<InterpretTurnResult>> FailNluAsync(
         Turn turn,
         DateTimeOffset now)
@@ -258,7 +431,7 @@ public sealed class InterpretTurnHandler
         return Task.FromResult(result);
     }
 
-    private async Task<Result> AddAnswerAsync(
+    private async Task<Result<Answer>> AddAnswerAsync(
         Turn turn,
         string text,
         DateTimeOffset now,
@@ -272,7 +445,7 @@ public sealed class InterpretTurnHandler
 
         await _answers.AddAsync(answer.Value, cancellationToken);
 
-        return Result.Success();
+        return answer;
     }
 
     private async Task RemoveDraftAsync(
@@ -324,6 +497,94 @@ public sealed class InterpretTurnHandler
         }
 
         return Result<Draft>.Success(draft);
+    }
+
+    private static Result<DomainCommand> BuildEventCreateCommand(
+        Turn turn,
+        Interpretation interpretation,
+        NluEmbedding? embedding,
+        Draft? previousDraft,
+        DateTimeOffset now)
+    {
+        if (interpretation.Kind is not { } kind)
+        {
+            return Result<DomainCommand>.Failure(DraftErrors.KindInvalid);
+        }
+
+        var payload = new EventCreatePayload(
+            ToPayloadKind(kind),
+            interpretation.Description,
+            CombineSourceText(previousDraft?.SourceText, turn.Text),
+            interpretation.StartsOn,
+            interpretation.StartsAt,
+            interpretation.Duration,
+            interpretation.IsDeadline,
+            embedding);
+
+        return DomainCommand.Create(
+            turn.Id,
+            seq: 0,
+            DomainCommandOperation.EventCreate,
+            EventCreatePayloadJson.Serialize(payload),
+            now);
+    }
+
+    private static bool TryParsePeriod(
+        NluEntities? entities,
+        out DateOnly from,
+        out DateOnly to)
+    {
+        from = default;
+        to = default;
+
+        return !string.IsNullOrWhiteSpace(entities?.PeriodFrom)
+            && !string.IsNullOrWhiteSpace(entities.PeriodTo)
+            && TryParseDate(entities.PeriodFrom, out from)
+            && TryParseDate(entities.PeriodTo, out to);
+    }
+
+    private static bool TryParseTypeFilter(string? value, out EventTypeFilter? filter)
+    {
+        switch (Normalize(value))
+        {
+            case null:
+                filter = null;
+                return true;
+            case "meeting":
+                filter = EventTypeFilter.Meeting;
+                return true;
+            case "task":
+                filter = EventTypeFilter.Task;
+                return true;
+            case "reminder":
+                filter = EventTypeFilter.Reminder;
+                return true;
+            default:
+                filter = null;
+                return false;
+        }
+    }
+
+    private static string ToPayloadKind(DraftKind kind) =>
+        kind switch
+        {
+            DraftKind.Task => "task",
+            DraftKind.Reminder => "reminder",
+            DraftKind.Meeting => "meeting",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+        };
+
+    private static string? CombineSourceText(string? previous, string? current)
+    {
+        string? left = Normalize(previous);
+        string? right = Normalize(current);
+
+        if (left is null)
+        {
+            return right;
+        }
+
+        return right is null ? left : $"{left}; {right}";
     }
 
     private static NluDraft? BuildDraftDto(Draft? draft)

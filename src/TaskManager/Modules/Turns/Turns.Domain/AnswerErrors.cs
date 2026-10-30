@@ -35,5 +35,13 @@ public static class AnswerErrors
 
     public static DomainError AudioDurationInvalid { get; } = DomainError.Expected(
         "ANSWER_AUDIO_DURATION_INVALID",
-        "Длительность озвучки должна быть положительной.");
+        "Длительность озвучки не может быть отрицательной.");
+
+    public static DomainError AudioSynthesisFailed { get; } = DomainError.Expected(
+        "ANSWER_AUDIO_SYNTHESIS_FAILED",
+        "Не удалось синтезировать озвучку ответа.");
+
+    public static DomainError NotFound { get; } = DomainError.Expected(
+        "ANSWER_NOT_FOUND",
+        "Ответ не найден.");
 }

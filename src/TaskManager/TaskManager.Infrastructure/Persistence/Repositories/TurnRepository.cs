@@ -30,6 +30,18 @@ public sealed class TurnRepository : ITurnRepository
             .Include(turn => turn.Draft)
             .FirstOrDefaultAsync(turn => turn.Id == turnId, cancellationToken);
 
+    public async Task<Turn?> GetByIdForUpdateAsync(
+        Guid turnId,
+        CancellationToken cancellationToken = default)
+    {
+        // ToListAsync без композиции: EF не оборачивает FOR UPDATE в подзапрос.
+        List<Turn> turns = await _dbContext.Turns
+            .FromSqlInterpolated($"select * from turns where id = {turnId} for update")
+            .ToListAsync(cancellationToken);
+
+        return turns.FirstOrDefault();
+    }
+
     public Task<Turn?> GetByIdempotencyKeyAsync(
         Guid idempotencyKey,
         CancellationToken cancellationToken = default) =>

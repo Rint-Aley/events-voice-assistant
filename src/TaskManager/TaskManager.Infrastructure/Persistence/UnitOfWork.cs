@@ -50,6 +50,10 @@ public sealed class UnitOfWork : IUnitOfWork, IAsyncDisposable
         await _transaction.RollbackAsync(cancellationToken);
         await _transaction.DisposeAsync();
         _transaction = null;
+
+        // Откаченные Added/Modified-сущности не должны попасть в следующий SaveChanges
+        // того же сценария: change tracker живёт дольше транзакции.
+        _dbContext.ChangeTracker.Clear();
     }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>

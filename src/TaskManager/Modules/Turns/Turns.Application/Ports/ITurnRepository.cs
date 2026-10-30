@@ -11,6 +11,13 @@ public interface ITurnRepository
 
     Task<Turn?> GetByIdAsync(Guid turnId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Читает ход с блокировкой строки <c>FOR UPDATE</c> до конца транзакции сценария.
+    /// Нужен сценарию применения команд: порядок <c>seq</c> и переход состояния
+    /// защищены от параллельного применения того же хода.
+    /// </summary>
+    Task<Turn?> GetByIdForUpdateAsync(Guid turnId, CancellationToken cancellationToken = default);
+
     Task<Turn?> GetByIdempotencyKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken = default);
 
     Task<Turn?> GetActiveBySessionAsync(Guid sessionId, CancellationToken cancellationToken = default);

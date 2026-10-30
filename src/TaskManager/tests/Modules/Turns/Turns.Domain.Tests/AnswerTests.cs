@@ -93,7 +93,7 @@ public sealed class AnswerTests
     }
 
     [Fact]
-    public void MarkAudioReady_RequiresPositiveDuration()
+    public void MarkAudioReady_AllowsZeroDurationFromTtsContract()
     {
         // Arrange
         var answer = Answer.Create(
@@ -104,6 +104,25 @@ public sealed class AnswerTests
 
         // Act
         var result = answer.MarkAudioReady("tts/answer.mp3", 0);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        answer.AudioStatus.Should().Be(AnswerAudioStatus.Ready);
+        answer.AudioDurationMs.Should().Be(0);
+    }
+
+    [Fact]
+    public void MarkAudioReady_RejectsNegativeDuration()
+    {
+        // Arrange
+        var answer = Answer.Create(
+            Guid.NewGuid(),
+            "Готово",
+            TestTurns.Now,
+            audioStatus: AnswerAudioStatus.Pending).Value;
+
+        // Act
+        var result = answer.MarkAudioReady("tts/answer.mp3", -1);
 
         // Assert
         result.IsSuccess.Should().BeFalse();

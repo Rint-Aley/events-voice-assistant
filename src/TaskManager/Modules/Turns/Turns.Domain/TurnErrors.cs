@@ -104,4 +104,8 @@ public static class TurnErrors
     public static DomainError TurnNotFound { get; } = DomainError.Expected(
         TurnNotFoundCode,
         "Ход не найден.");
+
+    public static DomainError DomainApplyFailed { get; } = DomainError.Expected(
+        DomainApplyFailedCode,
+        "Не удалось применить команды хода.");
 }
