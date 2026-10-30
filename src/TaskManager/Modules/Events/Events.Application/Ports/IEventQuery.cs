@@ -21,11 +21,19 @@ public interface IEventQuery
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Активные встречи, интервал <c>[start, start + duration)</c> которых пересекается
-    /// с окном <c>[<paramref name="from"/>, <paramref name="to"/>)</c>. Нужен
-    /// <c>ConflictDetector</c>: встреча могла начаться до окна и длиться через его начало.
+    /// Возвращает активные встречи-кандидаты, которые могли пересечься с окном
+    /// <c>[<paramref name="from"/>, <paramref name="to"/>)</c>. Это надмножество: в него
+    /// попадают встречи, начавшиеся за сутки до окна и позже, но не гарантируется, что
+    /// интервал каждой из них пересекает окно. Точную проверку с учётом
+    /// <c>[start, start + duration)</c> делает <c>ConflictDetector</c>.
     /// </summary>
-    Task<IReadOnlyList<Event>> ListActiveMeetingsAsync(
+    /// <remarks>
+    /// Суточный запас достаточен, потому что <c>duration_minutes</c> в контракте NLU не
+    /// превышает 1440. Встречи, созданные дольше чем на сутки в обход NLU, в кандидаты
+    /// не попадут. Если <paramref name="to"/> не позже <paramref name="from"/>, возвращается
+    /// пустой список.
+    /// </remarks>
+    Task<IReadOnlyList<Event>> ListActiveMeetingCandidatesAsync(
         DateTime from,
         DateTime to,
         CancellationToken cancellationToken = default);

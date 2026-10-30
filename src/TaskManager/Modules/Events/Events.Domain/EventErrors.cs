@@ -48,4 +48,8 @@ public static class EventErrors
     public static DomainError IsDeadlineOnlyForTask { get; } = DomainError.Expected(
         "IS_DEADLINE_ONLY_FOR_TASK",
         "Признак дедлайна допустим только для задачи.");
+
+    public static DomainError InvalidPeriod { get; } = DomainError.Expected(
+        "INVALID_PERIOD",
+        "Начало периода позже его конца.");
 }

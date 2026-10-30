@@ -16,7 +16,7 @@ public sealed class EventQueryTests : IAsyncLifetime
     public Task DisposeAsync() => _postgres.DisposeAsync().AsTask();
 
     [Fact]
-    public async Task ListActiveMeetings_includes_meeting_started_the_day_before_window()
+    public async Task ListActiveMeetingCandidates_includes_meeting_started_the_day_before_window()
     {
         // Arrange
         await using var dbContext = await CreateDbContextAsync();
@@ -38,7 +38,7 @@ public sealed class EventQueryTests : IAsyncLifetime
         var query = new EventQuery(dbContext);
 
         // Act
-        var existing = await query.ListActiveMeetingsAsync(
+        var existing = await query.ListActiveMeetingCandidatesAsync(
             new DateTime(2026, 10, 31, 0, 30, 0),
             new DateTime(2026, 10, 31, 1, 30, 0));
 
@@ -47,6 +47,166 @@ public sealed class EventQueryTests : IAsyncLifetime
         ConflictDetector.Detect(candidate, existing)
             .Should().ContainSingle()
             .Which.Id.Should().Be(overnightMeeting.Id);
+    }
+
+    [Fact]
+    public async Task ListActiveMeetingCandidates_returns_superset_that_detector_filters()
+    {
+        // Arrange
+        await using var dbContext = await CreateDbContextAsync();
+        var morningMeeting = AddMeeting(
+            dbContext,
+            "Утренняя встреча",
+            new DateOnly(2026, 10, 31),
+            new TimeOnly(8, 0),
+            TimeSpan.FromMinutes(60));
+        await dbContext.SaveChangesAsync();
+
+        var candidate = Event.Create(
+            EventKind.Meeting,
+            "Вечерняя встреча",
+            startsOn: new DateOnly(2026, 10, 31),
+            startsAt: new TimeOnly(15, 0),
+            duration: TimeSpan.FromMinutes(60)).Value;
+
+        var query = new EventQuery(dbContext);
+
+        // Act
+        var existing = await query.ListActiveMeetingCandidatesAsync(
+            new DateTime(2026, 10, 31, 15, 0, 0),
+            new DateTime(2026, 10, 31, 16, 0, 0));
+
+        // Assert
+        existing.Should().ContainSingle(@event => @event.Id == morningMeeting.Id);
+        ConflictDetector.Detect(candidate, existing).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ListActiveMeetingCandidates_excludes_meetings_started_before_previous_day()
+    {
+        // Arrange
+        await using var dbContext = await CreateDbContextAsync();
+        AddMeeting(
+            dbContext,
+            "Позапрошлая встреча",
+            new DateOnly(2026, 10, 29),
+            new TimeOnly(10, 0),
+            TimeSpan.FromMinutes(60));
+        await dbContext.SaveChangesAsync();
+
+        var query = new EventQuery(dbContext);
+
+        // Act
+        var existing = await query.ListActiveMeetingCandidatesAsync(
+            new DateTime(2026, 10, 31, 15, 0, 0),
+            new DateTime(2026, 10, 31, 16, 0, 0));
+
+        // Assert
+        existing.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ListActiveMeetingCandidates_takes_the_longest_meeting_of_previous_day()
+    {
+        // Arrange
+        await using var dbContext = await CreateDbContextAsync();
+        var longestMeeting = AddMeeting(
+            dbContext,
+            "Сутки с 23:30",
+            new DateOnly(2026, 10, 30),
+            new TimeOnly(23, 30),
+            TimeSpan.FromMinutes(1440));
+        await dbContext.SaveChangesAsync();
+
+        var candidate = Event.Create(
+            EventKind.Meeting,
+            "Ночная встреча",
+            startsOn: new DateOnly(2026, 10, 31),
+            startsAt: new TimeOnly(22, 0),
+            duration: TimeSpan.FromMinutes(60)).Value;
+
+        var query = new EventQuery(dbContext);
+
+        // Act
+        var existing = await query.ListActiveMeetingCandidatesAsync(
+            new DateTime(2026, 10, 31, 22, 0, 0),
+            new DateTime(2026, 10, 31, 23, 0, 0));
+
+        // Assert
+        existing.Should().ContainSingle(@event => @event.Id == longestMeeting.Id);
+        ConflictDetector.Detect(candidate, existing)
+            .Should().ContainSingle()
+            .Which.Id.Should().Be(longestMeeting.Id);
+    }
+
+    [Fact]
+    public async Task ListActiveMeetingCandidates_excludes_cancelled_done_and_non_meetings()
+    {
+        // Arrange
+        await using var dbContext = await CreateDbContextAsync();
+        AddMeeting(
+            dbContext,
+            "Активная встреча",
+            new DateOnly(2026, 10, 31),
+            new TimeOnly(15, 0),
+            TimeSpan.FromMinutes(60));
+        AddEvent(dbContext, Event.Restore(
+            Guid.NewGuid(),
+            EventKind.Meeting,
+            EventStatus.Cancelled,
+            "Отменённая встреча",
+            startsOn: new DateOnly(2026, 10, 31),
+            startsAt: new TimeOnly(15, 0),
+            duration: TimeSpan.FromMinutes(60)).Value);
+        AddEvent(dbContext, Event.Restore(
+            Guid.NewGuid(),
+            EventKind.Meeting,
+            EventStatus.Done,
+            "Завершённая встреча",
+            startsOn: new DateOnly(2026, 10, 31),
+            startsAt: new TimeOnly(15, 0),
+            duration: TimeSpan.FromMinutes(60)).Value);
+        AddEvent(dbContext, Event.Create(
+            EventKind.Reminder,
+            "Напоминание",
+            startsOn: new DateOnly(2026, 10, 31),
+            startsAt: new TimeOnly(15, 0)).Value);
+        await dbContext.SaveChangesAsync();
+
+        var query = new EventQuery(dbContext);
+
+        // Act
+        var existing = await query.ListActiveMeetingCandidatesAsync(
+            new DateTime(2026, 10, 31, 15, 0, 0),
+            new DateTime(2026, 10, 31, 16, 0, 0));
+
+        // Assert
+        existing.Should().ContainSingle()
+            .Which.Description.Should().Be("Активная встреча");
+    }
+
+    [Fact]
+    public async Task ListActiveMeetingCandidates_returns_empty_for_reversed_window()
+    {
+        // Arrange
+        await using var dbContext = await CreateDbContextAsync();
+        AddMeeting(
+            dbContext,
+            "Встреча",
+            new DateOnly(2026, 10, 31),
+            new TimeOnly(15, 0),
+            TimeSpan.FromMinutes(60));
+        await dbContext.SaveChangesAsync();
+
+        var query = new EventQuery(dbContext);
+
+        // Act
+        var existing = await query.ListActiveMeetingCandidatesAsync(
+            new DateTime(2026, 10, 31, 16, 0, 0),
+            new DateTime(2026, 10, 31, 15, 0, 0));
+
+        // Assert
+        existing.Should().BeEmpty();
     }
 
     [Fact]
@@ -146,5 +306,10 @@ public sealed class EventQueryTests : IAsyncLifetime
         dbContext.Events.Add(@event);
 
         return @event;
+    }
+
+    private static void AddEvent(TaskManagerDbContext dbContext, Event @event)
+    {
+        dbContext.Events.Add(@event);
     }
 }

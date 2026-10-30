@@ -51,16 +51,30 @@ public sealed class EventQuery : IEventQuery
         return new EventListResult(rows.Select(row => row.Event).ToList(), totalCount);
     }
 
-    public async Task<IReadOnlyList<Event>> ListActiveMeetingsAsync(
-        DateOnly from,
-        DateOnly to,
+    public async Task<IReadOnlyList<Event>> ListActiveMeetingCandidatesAsync(
+        DateTime from,
+        DateTime to,
         CancellationToken cancellationToken = default)
     {
+        if (to <= from)
+        {
+            return Array.Empty<Event>();
+        }
+
+        // NLU ограничивает duration_minutes значением 1440 (nlu.response.json), поэтому
+        // встреча длиннее суток не создаётся. Значит, пересечь начало окна может только
+        // встреча, начавшаяся не раньше предыдущего дня; этого диапазона достаточно и он
+        // остаётся range-scan по events_by_status (status, starts_on).
+        // Точное пересечение проверяет ConflictDetector: кандидаты — надмножество.
+        var earliestStartDate = DateOnly.FromDateTime(from).AddDays(-1);
+        var latestStartDate = DateOnly.FromDateTime(to);
+
         return await _dbContext.Events
             .AsNoTracking()
             .Where(@event => @event.Kind == EventKind.Meeting)
             .Where(@event => @event.Status == EventStatus.Active)
-            .Where(@event => @event.StartsOn >= from && @event.StartsOn <= to)
+            .Where(@event => @event.StartsOn >= earliestStartDate)
+            .Where(@event => @event.StartsOn <= latestStartDate)
             .ToListAsync(cancellationToken);
     }
 
