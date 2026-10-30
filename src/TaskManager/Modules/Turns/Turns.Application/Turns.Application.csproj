@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\TaskManager.Application.Abstractions\TaskManager.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\TaskManager.SharedKernel\TaskManager.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\Events\Events.Application\Events.Application.csproj" />
+    <ProjectReference Include="..\..\Events\Events.Domain\Events.Domain.csproj" />
+    <ProjectReference Include="..\Turns.Domain\Turns.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Pgvector" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" />
+    <PackageReference Include="Quartz" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\Events\Events.Application\Events.Application.csproj" />
+    <ProjectReference Include="..\Modules\Events\Events.Domain\Events.Domain.csproj" />
+    <ProjectReference Include="..\Modules\Turns\Turns.Application\Turns.Application.csproj" />
+    <ProjectReference Include="..\Modules\Turns\Turns.Domain\Turns.Domain.csproj" />
+    <ProjectReference Include="..\TaskManager.Application.Abstractions\TaskManager.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\TaskManager.SharedKernel\TaskManager.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>
