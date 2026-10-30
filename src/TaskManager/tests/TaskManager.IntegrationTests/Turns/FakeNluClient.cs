@@ -4,13 +4,19 @@ using TaskManager.Turns.Application.Ports;
 namespace TaskManager.IntegrationTests.Turns;
 
 /// <summary>Подменный <c>nlu</c>: отдаёт заранее заданный ответ и запоминает запросы.</summary>
-internal sealed class FakeNluClient : INluClient
+public sealed class FakeNluClient : INluClient
 {
     private readonly List<NluRequest> _requests = new();
 
     public Func<NluRequest, NluResponse>? Respond { get; set; }
 
     public IReadOnlyList<NluRequest> Requests => _requests;
+
+    public void Reset()
+    {
+        _requests.Clear();
+        Respond = null;
+    }
 
     public Task<NluResponse> InterpretAsync(
         NluRequest request,

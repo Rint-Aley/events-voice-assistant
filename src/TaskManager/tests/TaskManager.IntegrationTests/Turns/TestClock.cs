@@ -4,7 +4,7 @@ using TaskManager.SharedKernel;
 namespace TaskManager.IntegrationTests.Turns;
 
 /// <summary>Детерминированное время для сценариев приёма запроса.</summary>
-internal sealed class TestClock : IClock
+public sealed class TestClock : IClock
 {
     public TestClock(DateTimeOffset utcNow, TimeZoneInfo? timeZone = null)
     {

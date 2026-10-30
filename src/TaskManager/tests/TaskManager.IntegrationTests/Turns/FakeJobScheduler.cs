@@ -3,11 +3,13 @@ using TaskManager.Application.Abstractions;
 namespace TaskManager.IntegrationTests.Turns;
 
 /// <summary>Планировщик-заглушка: запоминает постановки и не запускает задачи.</summary>
-internal sealed class FakeJobScheduler : IJobScheduler
+public sealed class FakeJobScheduler : IJobScheduler
 {
     private readonly List<(JobKind Kind, Guid TargetId)> _scheduled = new();
 
     public IReadOnlyList<(JobKind Kind, Guid TargetId)> Scheduled => _scheduled;
+
+    public void Reset() => _scheduled.Clear();
 
     public Task ScheduleAsync(
         JobKind kind,

@@ -20,6 +20,23 @@ public static class QuartzServiceCollectionExtensions
 
         var options = new QuartzJobSchedulerOptions();
         configure?.Invoke(options);
+
+        return services.AddTaskManagerQuartz(connectionString, options);
+    }
+
+    /// <summary>
+    /// Подключение с готовыми настройками. Нужен, когда значения приходят из конфигурации:
+    /// свойства <see cref="QuartzJobSchedulerOptions"/> доступны только в инициализаторе.
+    /// </summary>
+    public static IServiceCollection AddTaskManagerQuartz(
+        this IServiceCollection services,
+        string connectionString,
+        QuartzJobSchedulerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        ArgumentNullException.ThrowIfNull(options);
+
         options.Validate();
 
         services.AddSingleton(options);
@@ -57,7 +74,7 @@ public static class QuartzServiceCollectionExtensions
                 GroupMatcher<TriggerKey>.GroupEquals(JobKeys.Group));
         });
 
-        services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
+        services.AddQuartzHostedService(hosting => hosting.WaitForJobsToComplete = true);
 
         return services;
     }
