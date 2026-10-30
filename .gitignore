@@ -1,0 +1,13 @@
+venv/
+.env
+__pycache__/
+*.pyc
+storage/
+test.wav
+test_tts.mp3
+body_tts.json
+.pytest_cache/
+.idea/
+.vscode/
+*.mp3
+*.wav
