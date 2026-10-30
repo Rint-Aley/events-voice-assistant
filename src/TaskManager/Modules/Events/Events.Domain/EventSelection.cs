@@ -50,6 +50,11 @@ public static class EventSelection
     /// <see cref="Event.StartsAt"/>; записи без времени идут в конце своего дня,
     /// задачи без даты — после всех датированных.
     /// </summary>
+    /// <remarks>
+    /// Тот же порядок продублирован в SQL в <c>EventQuery.ListPeriodAsync</c>, потому что
+    /// список читается с <c>Take</c> в базе. Менять оба места нужно вместе.
+    /// <see cref="Event.Id"/> — tiebreaker, чтобы порядок был стабильным.
+    /// </remarks>
     public static IReadOnlyList<Event> SortForList(IEnumerable<Event> events)
     {
         ArgumentNullException.ThrowIfNull(events);
@@ -59,6 +64,7 @@ public static class EventSelection
             .ThenBy(@event => @event.StartsOn)
             .ThenBy(@event => @event.StartsAt.HasValue ? 0 : 1)
             .ThenBy(@event => @event.StartsAt)
+            .ThenBy(@event => @event.Id)
             .ToList();
     }
 

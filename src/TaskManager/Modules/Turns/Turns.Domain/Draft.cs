@@ -13,6 +13,10 @@ public sealed class Draft
     /// <summary>Сколько раундов уточнений допускается до завершения хода.</summary>
     public const int MaxClarificationRounds = 2;
 
+    private Draft()
+    {
+    }
+
     private Draft(
         Guid id,
         Guid turnId,

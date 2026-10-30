@@ -2,9 +2,10 @@ namespace TaskManager.Application.Abstractions;
 
 /// <summary>
 /// Транзакция и единица сохранения сценария. Открывается, коммитится и откатывается
-/// только Application-сценарием; репозитории не коммитят.
+/// только Application-сценарием; репозитории не коммитят. При уничтожении незакрытая
+/// транзакция откатывается.
 /// </summary>
-public interface IUnitOfWork
+public interface IUnitOfWork : IAsyncDisposable
 {
     /// <summary>
     /// Открывает транзакцию сценария. Вложенные транзакции не поддерживаются.

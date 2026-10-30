@@ -5,6 +5,10 @@ namespace TaskManager.Turns.Domain;
 /// <summary>Связь ответа с событиями списка или поиска; позиция задаёт порядок.</summary>
 public sealed class AnswerEvent
 {
+    private AnswerEvent()
+    {
+    }
+
     private AnswerEvent(Guid answerId, Guid eventId, short position)
     {
         AnswerId = answerId;

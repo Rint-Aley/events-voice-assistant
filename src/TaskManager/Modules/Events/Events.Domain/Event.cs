@@ -8,6 +8,11 @@ public sealed class Event
     /// <summary>Длительность встречи по умолчанию.</summary>
     public static readonly TimeSpan DefaultMeetingDuration = TimeSpan.FromMinutes(60);
 
+    private Event()
+    {
+        Description = null!;
+    }
+
     private Event(
         Guid id,
         EventKind kind,

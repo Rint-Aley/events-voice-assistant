@@ -19,7 +19,7 @@ public sealed class DomainCommandTests
         result.Value.Status.Should().Be(DomainCommandStatus.Pending);
         result.Value.Attempts.Should().Be(0);
         result.Value.NextAttemptAt.Should().Be(TestTurns.Now);
-        result.Value.AppliedAt.Should().Be(default);
+        result.Value.AppliedAt.Should().BeNull();
         result.Value.IsDue(TestTurns.Now).Should().BeTrue();
     }
 

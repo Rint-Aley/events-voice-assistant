@@ -12,6 +12,10 @@ public sealed class Turn
     /// <summary>Версия только что созданного хода.</summary>
     public const int InitialStateVersion = 1;
 
+    private Turn()
+    {
+    }
+
     private Turn(
         Guid id,
         Guid sessionId,

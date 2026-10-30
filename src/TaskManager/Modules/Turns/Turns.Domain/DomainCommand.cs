@@ -12,6 +12,11 @@ public sealed class DomainCommand
     /// <summary>Сколько попыток применения допускается по умолчанию.</summary>
     public const int DefaultMaxAttempts = 3;
 
+    private DomainCommand()
+    {
+        Payload = null!;
+    }
+
     private DomainCommand(
         Guid id,
         Guid turnId,
@@ -23,7 +28,7 @@ public sealed class DomainCommand
         DateTimeOffset nextAttemptAt,
         string? lastError,
         DateTimeOffset createdAt,
-        DateTimeOffset appliedAt)
+        DateTimeOffset? appliedAt)
     {
         Id = id;
         TurnId = turnId;
@@ -68,8 +73,8 @@ public sealed class DomainCommand
     /// <summary>Время создания команды.</summary>
     public DateTimeOffset CreatedAt { get; }
 
-    /// <summary>Время успешного применения; <see langword="default"/> для неприменённой команды.</summary>
-    public DateTimeOffset AppliedAt { get; private set; }
+    /// <summary>Время успешного применения; <see langword="null"/>, если ещё не применена.</summary>
+    public DateTimeOffset? AppliedAt { get; private set; }
 
     /// <summary>Команду пора применять.</summary>
     public bool IsDue(DateTimeOffset now) =>
@@ -95,7 +100,7 @@ public sealed class DomainCommand
             nextAttemptAt: now,
             lastError: null,
             createdAt: now,
-            appliedAt: default);
+            appliedAt: null);
     }
 
     /// <summary>Восстанавливает сохранённую команду из хранилища.</summary>
@@ -110,7 +115,7 @@ public sealed class DomainCommand
         DateTimeOffset nextAttemptAt,
         DateTimeOffset createdAt,
         string? lastError = null,
-        DateTimeOffset appliedAt = default)
+        DateTimeOffset? appliedAt = null)
     {
         return Build(
             id,
@@ -189,7 +194,7 @@ public sealed class DomainCommand
         DateTimeOffset nextAttemptAt,
         string? lastError,
         DateTimeOffset createdAt,
-        DateTimeOffset appliedAt)
+        DateTimeOffset? appliedAt)
     {
         if (id == Guid.Empty)
         {
@@ -226,7 +231,7 @@ public sealed class DomainCommand
             return Result<DomainCommand>.Failure(DomainCommandErrors.AttemptsInvalid);
         }
 
-        if (appliedAt != default && appliedAt < createdAt)
+        if (appliedAt.HasValue && appliedAt.Value < createdAt)
         {
             return Result<DomainCommand>.Failure(DomainCommandErrors.TimestampInvalid);
         }

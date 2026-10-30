@@ -8,6 +8,12 @@ namespace TaskManager.Turns.Domain;
 /// </summary>
 public sealed class Answer
 {
+    private Answer()
+    {
+        Text = null!;
+        Warnings = Array.Empty<string>();
+    }
+
     private Answer(
         Guid id,
         Guid turnId,
