@@ -124,6 +124,11 @@ Infra┘          │
 
 - Unit-тесты — только Domain: `Turns.Domain.Tests`, `Events.Domain.Tests`.
 - Всё остальное — интеграционные тесты.
+- Тесты пишем в семантике Arrange, Act, Assert и явно обозначаем блоки комментариями
+  `// Arrange`, `// Act`, `// Assert`.
+- Тесты проверяют наблюдаемое поведение, а не детали реализации.
+- В unit-тестах Domain нет out-of-process collaborators, поэтому моки не нужны.
+  Исключения — только если появится реальная внешняя зависимость.
 - Утверждения — FluentAssertions (`.Should()`), без xUnit `Assert`.
 - БД в интеграционных тестах — реальный Postgres через Testcontainers.
 - `stt`, `nlu`, `tts`, S3 — NSubstitute/fakes.

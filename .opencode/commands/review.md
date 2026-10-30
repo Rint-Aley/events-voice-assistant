@@ -27,7 +27,8 @@ Diff:
 1. Контракты и совместимость со старым NLU.
 2. Границы Domain / Application / Infrastructure / Api.
 3. Поведение: clarify, cancel, statuses, list/search, conflicts, retries.
-4. Тесты: unit только Domain, интеграционные с Testcontainers.
+4. Тесты: unit только Domain, интеграционные с Testcontainers; Arrange/Act/Assert
+   с комментариями, FluentAssertions, в unit-тестах Domain без моков.
 5. Миграции: один DbContext, один migration history, без `vector(N)`/HNSW до TBD.
 6. Ошибки: коды и формат `error.json`.
 

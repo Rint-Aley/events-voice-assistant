@@ -7,6 +7,10 @@
 Все пути к бэкенду указаны от корня репозитория: `src/TaskManager/...`. В `src/` рядом
 лежат `tts`, `stt`, `nlu` и `web`, поэтому проекты бэкенда не создаются в корне `src/`.
 
+Тесты — xUnit + NSubstitute + FluentAssertions. Пиши их в семантике Arrange, Act, Assert
+с комментариями `// Arrange`, `// Act`, `// Assert`; проверяй наблюдаемое поведение, а не
+детали реализации. В unit-тестах Domain моки не нужны, кроме исключительных случаев.
+
 ## Как пользоваться
 
 1. Переключись на агент **Build**.
@@ -127,6 +131,7 @@
 - Quartz 4.x;
 - xUnit;
 - NSubstitute;
+- FluentAssertions;
 - Testcontainers.PostgreSql;
 - Microsoft.AspNetCore.Mvc.Testing для интеграционных тестов.
 

@@ -482,6 +482,11 @@ DbSet:
 - **Unit-тесты — только Domain.** `Turns.Domain.Tests`, `Events.Domain.Tests`.
 - **Интеграционные тесты — всё остальное.** Application, Infrastructure, Api, SSE, Quartz,
   EF-миграции.
+- Тесты пишем в семантике Arrange, Act, Assert с явными комментариями
+  `// Arrange`, `// Act`, `// Assert`.
+- Тесты проверяют наблюдаемое поведение, а не детали реализации.
+- В unit-тестах Domain нет out-of-process collaborators, поэтому моки не нужны.
+  Исключения — только если появится реальная внешняя зависимость.
 - Утверждения — FluentAssertions (`.Should()`), без xUnit `Assert`.
 - БД — реальный Postgres через Testcontainers.
 - Внешние зависимости — `stt`, `nlu`, `tts`, S3 — NSubstitute.

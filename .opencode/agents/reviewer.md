@@ -26,7 +26,8 @@ permissions:
   `Events.*` не зависит от `Turns.*`; транзакции только в Application;
 - поведение: обязательный заголовок; clarify максимум 2 раунда; отмена черновика;
   лимит 3; «Без даты»; `type_filter`; конфликты встреч; `NLU_FAILED`; retry 4xx/5xx;
-- тесты: unit только Domain; интеграционные с Testcontainers; edge cases;
+- тесты: unit только Domain; интеграционные с Testcontainers; Arrange/Act/Assert
+  с комментариями; FluentAssertions; в unit-тестах Domain без моков; edge cases;
 - миграции: один DbContext, один migration history, без `vector(N)` и HNSW до TBD;
 - ошибки: коды не переименованы, формат `error.json` не изменён;
 - размер diff: если больше ~700 строк или затронуто больше 2–3 проектов — предложи
