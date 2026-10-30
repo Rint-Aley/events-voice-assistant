@@ -67,4 +67,17 @@ public sealed class TurnRepository : ITurnRepository
             .OrderByDescending(turn => turn.CreatedAt)
             .ThenByDescending(turn => turn.Id)
             .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Turn>> ListActiveAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Черновик у активных ходов не бывает: Turn.Restore запрещает его вне
+        // NEEDS_CLARIFICATION, поэтому join на каждом тике reconciler не нужен.
+        return await _dbContext.Turns
+            .AsNoTracking()
+            .Where(turn => ActiveStates.Contains(turn.State))
+            .OrderBy(turn => turn.DeadlineAt)
+            .ThenBy(turn => turn.Id)
+            .ToListAsync(cancellationToken);
+    }
 }

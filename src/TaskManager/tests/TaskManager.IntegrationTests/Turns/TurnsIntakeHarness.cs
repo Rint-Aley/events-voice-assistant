@@ -64,6 +64,17 @@ internal sealed class TurnsIntakeHarness : IAsyncDisposable
             unitOfWork,
             clock);
         Synthesize = new SynthesizeAnswerHandler(answers, tts, unitOfWork);
+        FailTurn = new FailTurnHandler(turns, unitOfWork, clock);
+        FailAudio = new MarkAnswerAudioFailedHandler(answers, unitOfWork);
+        FinalizeFailure = new FinalizeJobFailureHandler(FailTurn, FailAudio);
+        Reconcile = new ReconcileHandler(
+            turns,
+            answers,
+            commands,
+            scheduler,
+            FailTurn,
+            FailAudio,
+            clock);
     }
 
     public TaskManagerDbContext DbContext => _dbContext;
@@ -91,6 +102,14 @@ internal sealed class TurnsIntakeHarness : IAsyncDisposable
     public ApplyTurnPlanHandler Apply { get; }
 
     public SynthesizeAnswerHandler Synthesize { get; }
+
+    public FailTurnHandler FailTurn { get; }
+
+    public MarkAnswerAudioFailedHandler FailAudio { get; }
+
+    public FinalizeJobFailureHandler FinalizeFailure { get; }
+
+    public ReconcileHandler Reconcile { get; }
 
     public static async Task<TurnsIntakeHarness> CreateAsync(
         string connectionString,

@@ -16,4 +16,21 @@ public interface IDomainCommandRepository
     Task<IReadOnlyList<DomainCommand>> ListPendingByTurnAsync(
         Guid turnId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Все команды хода в порядке <c>seq</c>, включая применённые и проваленные.
+    /// Нужны <c>reconciler</c> для страховки <c>APPLYING</c>.
+    /// </summary>
+    Task<IReadOnlyList<DomainCommand>> ListByTurnAsync(
+        Guid turnId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Ходы, у которых есть команда, готовая к применению. Тик <c>apply</c> обрабатывает
+    /// каждый ход отдельной транзакцией, поэтому выбираются только идентификаторы.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListDueTurnIdsAsync(
+        DateTimeOffset now,
+        int limit,
+        CancellationToken cancellationToken = default);
 }

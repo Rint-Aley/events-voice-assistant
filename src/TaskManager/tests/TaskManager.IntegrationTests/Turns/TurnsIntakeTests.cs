@@ -317,6 +317,34 @@ public sealed class TurnsIntakeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task InterpretTurn_fails_with_nlu_failed_when_search_has_no_embedding()
+    {
+        // Arrange
+        await using TurnsIntakeHarness harness = await CreateHarnessAsync();
+        harness.Nlu.Respond = _ => new NluResponse(
+            Guid.Empty,
+            "search",
+            0.9,
+            new NluEntities(Query: "поездка"),
+            Embedding: null);
+
+        var submitted = await harness.SubmitText.HandleAsync(
+            new SubmitTextCommand(Guid.NewGuid(), Guid.NewGuid(), "найди поездку"));
+
+        // Act
+        var interpreted = await harness.Interpret.HandleAsync(submitted.Value.TurnId);
+
+        // Assert
+        // nlu.response требует embedding для search: план без вектора — нарушение контракта.
+        interpreted.IsSuccess.Should().BeTrue();
+        interpreted.Value.State.Should().Be(TurnState.Failed);
+
+        var turn = await harness.DbContext.Turns.AsNoTracking()
+            .SingleAsync(item => item.Id == submitted.Value.TurnId);
+        turn.ErrorCode.Should().Be("NLU_FAILED");
+    }
+
+    [Fact]
     public async Task InterpretTurn_resets_previous_draft_on_intent_other_than_create_or_clarify()
     {
         // Arrange

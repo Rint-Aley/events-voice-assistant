@@ -6,15 +6,22 @@ namespace TaskManager.Turns.Application.Clients.Tts;
 /// </summary>
 public sealed class TtsException : Exception
 {
-    public TtsException(string message, int? statusCode = null, Exception? innerException = null)
+    private readonly bool? _isPermanent;
+
+    public TtsException(
+        string message,
+        int? statusCode = null,
+        Exception? innerException = null,
+        bool? isPermanent = null)
         : base(message, innerException)
     {
         StatusCode = statusCode;
+        _isPermanent = isPermanent;
     }
 
     /// <summary>HTTP-код ответа <c>tts</c>, если он был.</summary>
     public int? StatusCode { get; }
 
     /// <summary>Повтор не поможет: контракт нарушен или запрос отвергнут.</summary>
-    public bool IsPermanent => StatusCode is >= 400 and < 500;
+    public bool IsPermanent => _isPermanent ?? StatusCode is >= 400 and < 500;
 }

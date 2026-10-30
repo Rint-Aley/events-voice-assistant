@@ -27,4 +27,10 @@ public interface ITurnRepository
     /// Черновик предыдущего уточнения — источник слотов для следующего запроса.
     /// </summary>
     Task<Turn?> GetLatestClarificationAsync(Guid sessionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Активные ходы (<c>TRANSCRIBING</c>, <c>INTERPRETING</c>, <c>APPLYING</c>) без
+    /// отслеживания изменений. Нужны <c>reconciler</c>: просроченные ходы и пропавшие задачи.
+    /// </summary>
+    Task<IReadOnlyList<Turn>> ListActiveAsync(CancellationToken cancellationToken = default);
 }

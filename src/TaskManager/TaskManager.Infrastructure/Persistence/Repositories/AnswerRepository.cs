@@ -26,6 +26,31 @@ public sealed class AnswerRepository : IAnswerRepository
     public Task<Answer?> GetByIdAsync(Guid answerId, CancellationToken cancellationToken = default) =>
         _dbContext.Answers.FirstOrDefaultAsync(answer => answer.Id == answerId, cancellationToken);
 
+    public async Task<Answer?> GetByIdForUpdateAsync(
+        Guid answerId,
+        CancellationToken cancellationToken = default)
+    {
+        // ToListAsync без композиции: EF не оборачивает FOR UPDATE в подзапрос.
+        List<Answer> answers = await _dbContext.Answers
+            .FromSqlInterpolated($"select * from answers where id = {answerId} for update")
+            .ToListAsync(cancellationToken);
+
+        return answers.FirstOrDefault();
+    }
+
     public Task<Answer?> GetByTurnIdAsync(Guid turnId, CancellationToken cancellationToken = default) =>
         _dbContext.Answers.FirstOrDefaultAsync(answer => answer.TurnId == turnId, cancellationToken);
+
+    public async Task<IReadOnlyList<Answer>> ListPendingCreatedBeforeAsync(
+        DateTimeOffset createdBefore,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Answers
+            .AsNoTracking()
+            .Where(answer => answer.AudioStatus == AnswerAudioStatus.Pending
+                && answer.CreatedAt < createdBefore)
+            .OrderBy(answer => answer.CreatedAt)
+            .ThenBy(answer => answer.Id)
+            .ToListAsync(cancellationToken);
+    }
 }

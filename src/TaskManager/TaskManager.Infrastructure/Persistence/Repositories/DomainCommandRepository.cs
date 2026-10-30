@@ -31,4 +31,42 @@ public sealed class DomainCommandRepository : IDomainCommandRepository
             .ThenBy(command => command.Id)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<DomainCommand>> ListByTurnAsync(
+        Guid turnId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.DomainCommands
+            .AsNoTracking()
+            .Where(command => command.TurnId == turnId)
+            .OrderBy(command => command.Seq)
+            .ThenBy(command => command.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> ListDueTurnIdsAsync(
+        DateTimeOffset now,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be positive.");
+        }
+
+        // Тик обрабатывает ход отдельной транзакцией и блокирует строку turns.
+        // Postgres не принимает DISTINCT с ORDER BY по колонкам вне выборки, поэтому
+        // turn_id схлопывается через GROUP BY, а порядок задаёт самая ранняя команда хода.
+        // Порядок команд внутри хода задаёт ListPendingByTurnAsync.
+        return await _dbContext.DomainCommands
+            .AsNoTracking()
+            .Where(command => command.Status == DomainCommandStatus.Pending
+                && command.NextAttemptAt <= now)
+            .GroupBy(command => command.TurnId)
+            .OrderBy(group => group.Min(command => command.NextAttemptAt))
+            .ThenBy(group => group.Key)
+            .Select(group => group.Key)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
 }

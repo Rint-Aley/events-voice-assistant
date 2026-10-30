@@ -18,4 +18,11 @@ public interface IObjectStorage
     Task<Uri> CreatePresignedDownloadUrlAsync(
         string objectKey,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Тип содержимого объекта по расширению ключа. Нужен <c>stt</c>: контракт требует
+    /// тот же <c>content_type</c>, с которым клиент загрузил файл. <c>HeadObject</c>
+    /// не используется.
+    /// </summary>
+    string GetContentType(string objectKey);
 }

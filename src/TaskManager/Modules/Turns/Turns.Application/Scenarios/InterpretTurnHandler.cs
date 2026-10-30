@@ -141,10 +141,14 @@ public sealed class InterpretTurnHandler
 
         bool descriptionSupplied = !string.IsNullOrWhiteSpace(
             Normalize(response.Entities?.Description));
-        bool requiresEmbedding = intent.Value is
-            TurnIntent.CreateTask or TurnIntent.CreateReminder or TurnIntent.CreateMeeting
-                ? !string.IsNullOrWhiteSpace(interpretation.Description)
-                : descriptionSupplied;
+        bool requiresEmbedding = intent.Value switch
+        {
+            TurnIntent.CreateTask or TurnIntent.CreateReminder or TurnIntent.CreateMeeting =>
+                !string.IsNullOrWhiteSpace(interpretation.Description),
+            // search без вектора нарушает nlu.response: allOf требует embedding.
+            TurnIntent.Search => true,
+            _ => descriptionSupplied,
+        };
 
         if (requiresEmbedding && !IsEmbeddingValid(response.Embedding))
         {
@@ -840,7 +844,9 @@ public sealed class InterpretTurnHandler
 
     private static bool IsEmbeddingValid(NluEmbedding? embedding)
     {
-        if (embedding is null || string.IsNullOrWhiteSpace(embedding.Model))
+        if (embedding is null
+            || string.IsNullOrWhiteSpace(embedding.Model)
+            || embedding.Values is null)
         {
             return false;
         }
