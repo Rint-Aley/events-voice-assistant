@@ -14,4 +14,10 @@ public interface ITurnRepository
     Task<Turn?> GetByIdempotencyKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken = default);
 
     Task<Turn?> GetActiveBySessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Последний ход сессии в <see cref="TurnState.NeedsClarification"/> вместе с черновиком.
+    /// Черновик предыдущего уточнения — источник слотов для следующего запроса.
+    /// </summary>
+    Task<Turn?> GetLatestClarificationAsync(Guid sessionId, CancellationToken cancellationToken = default);
 }

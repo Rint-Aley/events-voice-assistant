@@ -43,4 +43,16 @@ public sealed class TurnRepository : ITurnRepository
             .FirstOrDefaultAsync(
                 turn => turn.SessionId == sessionId && ActiveStates.Contains(turn.State),
                 cancellationToken);
+
+    public Task<Turn?> GetLatestClarificationAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken = default) =>
+        _dbContext.Turns
+            .Include(turn => turn.Draft)
+            .Where(turn => turn.SessionId == sessionId
+                && turn.State == TurnState.NeedsClarification
+                && turn.Draft != null)
+            .OrderByDescending(turn => turn.CreatedAt)
+            .ThenByDescending(turn => turn.Id)
+            .FirstOrDefaultAsync(cancellationToken);
 }

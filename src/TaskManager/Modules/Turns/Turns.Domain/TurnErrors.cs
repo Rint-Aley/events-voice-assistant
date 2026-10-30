@@ -22,6 +22,9 @@ public static class TurnErrors
 
     public const string DeadlineExceededCode = "DEADLINE_EXCEEDED";
 
+    /// <summary>Код неизвестного хода; совпадает с HTTP-кодом <c>TURN_NOT_FOUND</c>.</summary>
+    public const string TurnNotFoundCode = "TURN_NOT_FOUND";
+
     public static DomainError IdRequired { get; } = DomainError.Expected(
         "TURN_ID_REQUIRED",
         "Идентификатор хода обязателен.");
@@ -97,4 +100,8 @@ public static class TurnErrors
     public static DomainError SessionBusy { get; } = DomainError.Expected(
         SessionBusyCode,
         "В сессии уже есть активный ход.");
+
+    public static DomainError TurnNotFound { get; } = DomainError.Expected(
+        TurnNotFoundCode,
+        "Ход не найден.");
 }

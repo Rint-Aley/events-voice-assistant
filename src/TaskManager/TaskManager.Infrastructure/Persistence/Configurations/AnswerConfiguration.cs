@@ -48,6 +48,9 @@ internal sealed class AnswerConfiguration : IEntityTypeConfiguration<Answer>
                 status => EnumText.ToDb(status),
                 value => EnumText.AudioStatusFromDb(value))
             .HasDefaultValue(AnswerAudioStatus.Skipped)
+            // Pending — CLR default (0), но это значимое значение: без явного sentinel
+            // EF не вставил бы его и база подставила бы skipped.
+            .HasSentinel(AnswerAudioStatus.Skipped)
             .IsRequired();
 
         builder.Property(answer => answer.AudioDurationMs)
