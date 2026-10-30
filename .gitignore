@@ -1,0 +1,36 @@
+*.docx
+Testovoe_zadanie_golosovoj_assistent_dlya_zadach_i_261021_115649.pdf
+
+# .NET build output
+bin/
+obj/
+artifacts/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# Test results and coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# IDE and user files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.rsuser
+*.DotSettings.user
+
+# NuGet and build logs
+*.nupkg
+*.snupkg
+project.lock.json
+*.binlog
+
+# Other
+BenchmarkDotNet.Artifacts/
+*.received.*
