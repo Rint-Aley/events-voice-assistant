@@ -38,7 +38,7 @@ TaskManager не распознаёт речь, не разбирает текс
 | ORM | EF Core + Npgsql |
 | Векторы | pgvector |
 | Планировщик | Quartz.NET 4.x |
-| Тесты | xUnit + NSubstitute |
+| Тесты | xUnit + NSubstitute + FluentAssertions |
 | БД в тестах | Testcontainers + Postgres/pgvector |
 | JSON | System.Text.Json |
 | Логи | `Microsoft.Extensions.Logging` |
@@ -482,6 +482,7 @@ DbSet:
 - **Unit-тесты — только Domain.** `Turns.Domain.Tests`, `Events.Domain.Tests`.
 - **Интеграционные тесты — всё остальное.** Application, Infrastructure, Api, SSE, Quartz,
   EF-миграции.
+- Утверждения — FluentAssertions (`.Should()`), без xUnit `Assert`.
 - БД — реальный Postgres через Testcontainers.
 - Внешние зависимости — `stt`, `nlu`, `tts`, S3 — NSubstitute.
 - Планировщик в тестах Application — fake `IJobScheduler`; Quartz-адаптер проверяется

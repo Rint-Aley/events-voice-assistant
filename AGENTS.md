@@ -124,6 +124,7 @@ Infra┘          │
 
 - Unit-тесты — только Domain: `Turns.Domain.Tests`, `Events.Domain.Tests`.
 - Всё остальное — интеграционные тесты.
+- Утверждения — FluentAssertions (`.Should()`), без xUnit `Assert`.
 - БД в интеграционных тестах — реальный Postgres через Testcontainers.
 - `stt`, `nlu`, `tts`, S3 — NSubstitute/fakes.
 - Планировщик в тестах Application — fake `IJobScheduler`; Quartz-адаптер проверяется
