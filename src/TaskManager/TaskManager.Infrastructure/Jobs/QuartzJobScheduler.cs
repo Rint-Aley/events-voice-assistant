@@ -42,7 +42,8 @@ public sealed class QuartzJobScheduler : IJobScheduler
             // После падения процесса задача возвращается в работу, а не остаётся
             // в BLOCKED/ERROR: планировщик не должен терять незавершённый ход.
             .RequestRecovery()
-            .UsingJobData(JobData.TargetId, targetId)
+            // Persistent store with StoreJobDataAsStrings requires string values.
+            .UsingJobData(JobData.TargetId, targetId.ToString("D"))
             .UsingJobData(JobData.Kind, kind.ToString())
             .Build();
 
