@@ -28,6 +28,8 @@
 - **Confidence:** рассчитывается как экспонента от среднего логарифма вероятности (`exp(avg_logprob)`), результат ограничивается диапазоном [0, 1].
 - **Изоляция:** вызовы `ffprobe` и `model.transcribe` обернуты в `asyncio.to_thread`. Для защиты от зомби-потоков при таймауте наложен семафор `asyncio.Semaphore(2)`.
 - **Идемпотентность:** реализована in-flight дедупликация по `turn_id` (второй запрос ждет завершения первого) и LRU-кэш (`OrderedDict`) на 1000 записей с TTL 10 минут. Кэш очищается фоновым таском.
+- **Валидация:** строгая Pydantic-схема запроса (`extra="forbid"`) с проверкой типов и лимитов.
+- **Docker:** модель `base` предзагружается на этапе сборки образа; при старте она загружается в память, healthcheck не пропускает трафик до готовности сервиса.
 
 ## 4. Конфигурация (env)
 - `STT_MODEL=base` - выбор модели.
@@ -52,3 +54,10 @@ curl -X POST http://127.0.0.1:8010/v1/transcribe \
   -H "Content-Type: application/json" \
   -d '{"turn_id":"11111111-1111-1111-1111-111111111111","audio_url":"http://host.docker.internal:8001/missing.wav","content_type":"audio/wav"}'
 ```
+
+## 7. Сборка и запуск
+- **Исходники и файлы сборки:** `src/stt/` (`app.py`, `requirements.txt`, `Dockerfile`, `.dockerignore`).
+- **Порт:** `8010`.
+- **Docker-образ:** `docker build -t todo-stt src/stt`, запуск — `docker run -p 8010:8010 todo-stt`.
+- **Локальный запуск:** `pip install -r src/stt/requirements.txt`, затем `uvicorn app:app --app-dir src/stt --port 8010`. Нужны установленные `ffmpeg` и `ffprobe`.
+- **Запуск всех сервисов** через `docker compose` появится вместе с compose-файлом на следующем шаге.

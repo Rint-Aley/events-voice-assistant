@@ -6,11 +6,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY requirements.tts.txt .
-RUN pip install --no-cache-dir -r requirements.tts.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY services/__init__.py ./services/
-COPY services/tts/ ./services/tts/
+COPY app.py .
 
 ENV TTS_DEFAULT_VOICE=ru-RU-SvetlanaNeural \
     TTS_DEFAULT_FORMAT=mp3 \
@@ -22,4 +21,4 @@ EXPOSE 8020
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/health')"
 
-CMD ["uvicorn", "services.tts.app:app", "--host", "0.0.0.0", "--port", "8020"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8020"]

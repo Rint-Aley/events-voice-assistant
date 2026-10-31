@@ -93,8 +93,10 @@ TaskManager — **один** деплой-юнит, внутри модульн�
     nlu.request.json  nlu.response.json
     tts.request.json  tts.response.json
     archive/            # схемы брокера, не используются
-/services
+/src
   task-manager/  stt/  nlu/  tts/  web/
+    # каждый сервис — отдельная единица сборки:
+    # Dockerfile, requirements.txt и исходники внутри папки сервиса
 /deploy
   docker-compose.yml
 ```

@@ -26,6 +26,7 @@
 - **Конвертация:** Выполняется через `ffmpeg` (в `asyncio.to_thread`). Для `ogg_opus` явно указывается контейнер (`-f ogg`). Ошибки `CalledProcessError` перехватываются и возвращают 422.
 - **Изоляция:** Параллельные запросы с одинаковым хэшем синхронизируются через `asyncio.Lock`. Одновременные вызовы ffmpeg/edge-tts ограничены семафором `asyncio.Semaphore(3)`. Словарь локов очищается фоновым таском.
 - **Очистка:** Временные файлы удаляются в блоке `finally` при любом исходе (успех или ошибка).
+- **Валидация:** строгая Pydantic-схема запроса (`extra="forbid"`) с проверкой типов и лимитов.
 
 ## 4. Конфигурация (env)
 - `TTS_DEFAULT_VOICE=ru-RU-SvetlanaNeural`
@@ -51,3 +52,10 @@ curl -X POST http://127.0.0.1:8020/v1/synthesize \
   -H "Content-Type: application/json" \
   -d '{"answer_id":"22222222-2222-2222-2222-222222222222","text":"Готово: напоминание на завтра, 10:00","voice":"ru-RU-SvetlanaNeural","format":"mp3"}'
 ```
+
+## 7. Сборка и запуск
+- **Исходники и файлы сборки:** `src/tts/` (`app.py`, `requirements.txt`, `Dockerfile`, `.dockerignore`).
+- **Порт:** `8020`.
+- **Docker-образ:** `docker build -t todo-tts src/tts`, запуск — `docker run -p 8020:8020 -e S3_ENDPOINT=... todo-tts`.
+- **Локальный запуск:** `pip install -r src/tts/requirements.txt`, затем `uvicorn app:app --app-dir src/tts --port 8020`. Нужны доступный S3 и переменные `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_TTS`, `S3_REGION`.
+- **Запуск всех сервисов** через `docker compose` появится вместе с compose-файлом на следующем шаге.
