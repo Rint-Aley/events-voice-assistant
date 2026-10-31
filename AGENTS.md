@@ -93,8 +93,8 @@ Infra┘          │
 - `events.description` — обязательный заголовок для всех типов.
 - `events.source_text` — исходные фразы пользователя, не участвует в эмбеддинге.
 - `events.is_deadline` — только для `task`.
-- `EMBEDDING_MODEL` и `EMBEDDING_DIM` — `TBD(BLOCKING)`.
-- До фиксации модели не создавать `vector(N)` и HNSW-индекс.
+- `EMBEDDING_MODEL=text-embedding-3-small`, `EMBEDDING_DIM=1536` — зафиксированы.
+- Колонка `vector(1536)` и HNSW-индекс создаются миграцией TaskManager.
 - `description` без валидного `embedding` — `NLU_FAILED`, событие не создаётся.
 
 ## Поведение, которое нельзя ломать
@@ -134,7 +134,7 @@ Infra┘          │
 - `stt`, `nlu`, `tts`, S3 — NSubstitute/fakes.
 - Планировщик в тестах Application — fake `IJobScheduler`; Quartz-адаптер проверяется
   отдельным тестом с in-memory store.
-- Семантический поиск с `vector(N)` блокируется до фиксации embedding-модели.
+- Семантический поиск тестируется на реальном Postgres/pgvector (`vector(1536)`).
 
 ## Правила работы агента
 
@@ -158,7 +158,7 @@ Infra┘          │
 - `dotnet test src/TaskManager/TaskManager.sln` проходит.
 - `git diff --check` без ошибок.
 - Нет изменений контрактов без разрешения.
-- Нет `vector(N)` и HNSW до фиксации `EMBEDDING_MODEL`/`EMBEDDING_DIM`.
+- Миграция использует `vector(1536)` и HNSW; размерность совпадает с `EMBEDDING_DIM`.
 - Тесты покрывают поведение, а не только happy path.
 - Документация не противоречит коду; если противоречие найдено — сообщить, а не
   молча менять docs.

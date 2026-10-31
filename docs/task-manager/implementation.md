@@ -271,8 +271,7 @@ DbSet:
   `state = expected and state_version = version`;
 - `domain_commands` — выборка `FOR UPDATE SKIP LOCKED` через Npgsql/EF;
 - `events.starts_at` — `time` без зоны, `DateOnly`/`TimeOnly` в Domain;
-- `events.embedding` — `vector` только после фиксации `EMBEDDING_MODEL`/`EMBEDDING_DIM`;
-  HNSW-индекс не создавать до этого.
+- `events.embedding` — `vector(1536)`; HNSW-индекс создаётся миграцией.
 
 ### 7.2 Репозитории и query-порты
 
@@ -435,8 +434,8 @@ DbSet:
 - `events.source_text` — исходные фразы, не участвует в эмбеддинге;
 - `events.starts_at` — `time` без зоны, интерпретируется в `TIMEZONE`;
 - `events.is_deadline` — только task;
-- `events.embedding` — `vector` без размерности до фиксации модели; HNSW не создавать.
-  После фиксации модели добавить размерность, `NOT NULL` для созданных событий и HNSW-индекс;
+- `events.embedding` — `vector(1536)`, HNSW-индекс; `NOT NULL` для событий с описанием.
+  Модель — `text-embedding-3-small`;
 - `drafts.source_text`, `drafts.clarification_round`, `drafts.is_deadline`;
 - `answers.total_count`, `answers.warnings`;
 - `domain_commands.payload` содержит `source_text` и `is_deadline`.
@@ -467,8 +466,8 @@ DbSet:
 | `RECONCILE_SECONDS` | `10` |
 | `SSE_AUDIO_WAIT_SECONDS` | `30` |
 | `AUDIO_RETENTION_DAYS` | `7` |
-| `EMBEDDING_MODEL` | `TBD(BLOCKING)` |
-| `EMBEDDING_DIM` | `TBD(BLOCKING)` |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` |
+| `EMBEDDING_DIM` | `1536` |
 | `PRESIGN_TTL_SECONDS` | `600` / `900` |
 
 `content_type` — по расширению `object_key`; неизвестное — `application/octet-stream`.
@@ -492,7 +491,7 @@ DbSet:
 - Внешние зависимости — `stt`, `nlu`, `tts`, S3 — NSubstitute.
 - Планировщик в тестах Application — fake `IJobScheduler`; Quartz-адаптер проверяется
   отдельным интеграционным тестом с in-memory store.
-- Семантический поиск с `vector(N)` блокируется до фиксации embedding-модели.
+- Семантический поиск проверяется на реальном Postgres/pgvector (`vector(1536)`).
 
 ### 13.2 Обязательные кейсы
 
@@ -517,11 +516,11 @@ DbSet:
 1. Solution, проекты, `Directory.Build.props`, central package management.
 2. `SharedKernel`, Domain Turns/Events, unit-тесты Domain.
 3. Application-порты и сценарии Turns/Events.
-4. Infrastructure: `DbContext`, конфигурации, репозитории, миграции без embedding.
+4. Infrastructure: `DbContext`, конфигурации, репозитории, миграции с `events.embedding vector(1536)` и HNSW.
 5. Quartz 4.x: jobs, retry policy, listener, scheduler adapter.
 6. Api: endpoint'ы, SSE, health, DI, конфигурация.
 7. Интеграционные тесты и Testcontainers.
-8. После фиксации модели — миграция `vector(N)`, HNSW, тесты семантического поиска.
+8. Search в `Events.Application` и тесты семантического поиска на реальном Postgres/pgvector.
 
 Definition of done:
 
@@ -537,8 +536,8 @@ Definition of done:
 
 ## 15. TBD и блокеры
 
-- `EMBEDDING_MODEL` и `EMBEDDING_DIM` — `TBD(BLOCKING)`. До ответа нельзя создавать
-  `vector(N)` и HNSW-индекс. Агент обязан остановиться и спросить.
+- `EMBEDDING_MODEL` и `EMBEDDING_DIM` — зафиксированы: `text-embedding-3-small`, `1536`.
+  Колонка `vector(1536)` и HNSW-индекс создаются миграцией.
 - `content_type` — решено: расширение `object_key`, без `HeadObject`.
 - `total_count` — решено: необязательное поле списка.
 - Переключение статусов, удаление, отметка выполнения — LATER.
