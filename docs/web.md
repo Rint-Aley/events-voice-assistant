@@ -33,21 +33,23 @@ npm run build
 
 ```bash
 docker build -t todo-web src/web
-docker run --rm -p 8080:80 -e TASKMANAGER_URL=http://host.docker.internal:8080 todo-web
+docker run --rm -p 8080:80 -e TASKMANAGER_URL=http://host.docker.internal:5000 todo-web
 ```
 
 Образ двухступенчатый: Node собирает статику (`npm ci && npm run build`), nginx раздаёт
-`dist` и проксирует `/api/` на `TASKMANAGER_URL` (по умолчанию `http://taskmanager:8080`).
-`VITE_API_BASE_URL` задаётся на этапе сборки (`--build-arg`, по умолчанию `/api/v1`);
-для SSE проксирование идёт без буферизации. Healthcheck — `GET /healthz`.
+`dist` и проксирует `/api/` на `TASKMANAGER_URL`. В образе значение по умолчанию —
+`http://taskmanager:8080`, а compose задаёт `host.docker.internal:5000`, пока TaskManager
+запущен на хосте. `VITE_API_BASE_URL` задаётся на этапе сборки (`--build-arg`, по
+умолчанию `/api/v1`); для SSE проксирование идёт без буферизации. Healthcheck —
+`GET /healthz`.
 
-Фрагмент для общего `deploy/docker-compose.yml` (имя и порт сервиса TaskManager уточнить
-при его контейнеризации):
+Фрагмент `deploy/docker-compose.yml`:
 
 ```yaml
   web:
     build:
       context: ../src/web
+      dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api/v1
     container_name: todo-web
@@ -55,16 +57,17 @@ docker run --rm -p 8080:80 -e TASKMANAGER_URL=http://host.docker.internal:8080 t
     ports:
       - "127.0.0.1:${WEB_PORT:-8080}:80"
     environment:
-      TASKMANAGER_URL: http://taskmanager:8080
-    depends_on:
-      taskmanager:
-        condition: service_healthy
+      TASKMANAGER_URL: ${TASKMANAGER_URL:-http://host.docker.internal:5000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null"]
       interval: 10s
       timeout: 3s
       retries: 3
 ```
+
+После контейнеризации TaskManager задайте `TASKMANAGER_URL=http://taskmanager:8080`.
 
 ## Потоки
 

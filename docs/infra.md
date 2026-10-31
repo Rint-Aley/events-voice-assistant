@@ -1,13 +1,13 @@
 # infra
 
-Версия: 1.2. Владелец: infra. Основано на `docs/architecture.md` v0.10.
+Версия: 1.3. Владелец: infra. Основано на `docs/architecture.md` v0.10.
 
 ## 1. Границы
 
-`deploy/docker-compose.yml` поднимает инфраструктуру (Postgres и S3) и голосовые
-сервисы `stt`/`tts`. Приложения `web` и `TaskManager` запускаются локально и ходят
-на `localhost`; в будущем они тоже могут быть упакованы в контейнеры без изменения
-контрактов.
+`deploy/docker-compose.yml` поднимает инфраструктуру (Postgres и S3), голосовые
+сервисы `stt`/`tts` и `web`. `TaskManager` пока запускается локально на хосте —
+web проксирует к нему `/api/` через `TASKMANAGER_URL`; после контейнеризации
+TaskManager переключение сводится к этой переменной.
 
 Брокер не используется. Схему БД, таблицы, колонку `vector` и HNSW-индекс создаёт TaskManager;
 infra отвечает только за расширение `vector` и бакеты. Размерность вектора — `TBD(BLOCKING)`:
@@ -79,7 +79,7 @@ CORS для браузерных presigned PUT/GET включён на уров�
 `POSTGRES_*`, `S3_PORT`, `S3_CONSOLE_PORT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`,
 `S3_REGION`, `S3_BUCKET_*`, `S3_CORS_ALLOWED_ORIGINS`, `AUDIO_RETENTION_DAYS`,
 `STT_PORT`, `STT_MODEL`, `STT_DEADLINE_SECONDS`, `TTS_PORT`, `TTS_DEFAULT_VOICE`,
-`TTS_DEFAULT_FORMAT`, `TTS_TIMEOUT_SECONDS`.
+`TTS_DEFAULT_FORMAT`, `TTS_TIMEOUT_SECONDS`, `WEB_PORT`, `TASKMANAGER_URL`.
 `S3_PUBLIC_*`, `S3_ENDPOINT`, `S3_INTERNAL_ENDPOINT`, `DATABASE_URL` и TTL — контракт
 для конфигов приложений; внутри контейнера `tts` используется `S3_ENDPOINT=s3:9000`.
 
@@ -93,17 +93,20 @@ curl -sI http://localhost:9000/minio/health/live
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:9000/audio/
 curl -fsS http://127.0.0.1:8010/health
 curl -fsS http://127.0.0.1:8020/health
+curl -fsS http://127.0.0.1:8080/healthz
+curl -fsS http://127.0.0.1:8080/api/v1/health
 docker compose down -v
 ```
 
-Ожидается: compose без ошибок; `postgres`, `s3`, `voice-stt`, `voice-tts` в статусе
+Ожидается: compose без ошибок; `postgres`, `s3`, `voice-stt`, `voice-tts`, `web` в статусе
 `healthy`, `todo-s3-init` завершился с кодом `0`; версия `vector` непустая; health
-S3 — `200`; анонимный доступ к `audio` — `403`; health STT/TTS — `{"status":"ok"}`.
+S3 — `200`; анонимный доступ к `audio` — `403`; health STT/TTS — `{"status":"ok"}`;
+`/healthz` web — `ok`, а `/api/v1/health` отвечает TaskManager через прокси.
 
 ## 7. Отложено
 
 - демо по LAN или HTTPS: нужен внешний IP/домен, публикация портов не только на loopback,
   TLS или reverse proxy;
 - общие ключи S3 для `stt`/`tts` вместо presigned URL (см. §4);
-- контейнеризация `TaskManager` и `web` и разделение public/internal endpoint на consumers;
+- контейнеризация `TaskManager` и разделение public/internal endpoint на consumers;
 - production-hardening: секреты вне `.env`, ротация ключей, ограниченные IAM-политики.
