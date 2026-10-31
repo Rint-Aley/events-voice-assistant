@@ -1,0 +1,54 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local config and secrets
+.env
+
+# Local media and manual test artifacts
+storage/
+test.wav
+test_tts.mp3
+body_tts.json
+*.mp3
+*.wav
+
+# .NET build output
+bin/
+obj/
+artifacts/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# Test results and coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# IDE and user files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.rsuser
+*.DotSettings.user
+
+# NuGet and build logs
+*.nupkg
+*.snupkg
+project.lock.json
+*.binlog
+
+# Documents and other
+*.docx
+Testovoe_zadanie_golosovoj_assistent_dlya_zadach_i_261021_115649.pdf
+
+# Other
+BenchmarkDotNet.Artifacts/
+*.received.*
