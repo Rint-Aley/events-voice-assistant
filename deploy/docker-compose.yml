@@ -140,6 +140,30 @@ services:
     networks:
       - todo-net
 
+  web:
+    build:
+      context: ../src/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    container_name: todo-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    environment:
+      # TaskManager пока запускается на хосте; после его контейнеризации
+      # задайте TASKMANAGER_URL=http://taskmanager:8080.
+      TASKMANAGER_URL: ${TASKMANAGER_URL:-http://host.docker.internal:5000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - todo-net
+
 networks:
   todo-net:
     name: todo-net

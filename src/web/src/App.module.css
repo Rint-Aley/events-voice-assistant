@@ -1,0 +1,516 @@
+.appShell {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 0 16px;
+}
+
+.chat {
+  display: flex;
+  width: min(100%, 880px);
+  height: 100vh;
+  height: 100dvh;
+  min-height: 420px;
+  flex-direction: column;
+}
+
+.header {
+  z-index: 1;
+  display: flex;
+  min-height: 88px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  background: var(--color-background);
+}
+
+.brand {
+  color: var(--color-text);
+  font-size: 20px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.voiceStatus {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.voiceStatus:hover {
+  background: #f6c8d9;
+}
+
+.voiceDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.conversation {
+  display: flex;
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0 20px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.welcome {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.welcome h1 {
+  margin: 0;
+  font-size: clamp(21px, 4vw, 26px);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.welcome p {
+  margin: 12px 0 28px;
+  color: var(--color-muted);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.suggestions {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.suggestion {
+  max-width: 100%;
+  min-height: 48px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-accent-soft);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  transition: background-color 140ms ease, transform 140ms ease;
+}
+
+.suggestion:hover:not(:disabled) {
+  background: #f6c8d9;
+  transform: translateY(-1px);
+}
+
+.suggestion:disabled {
+  color: var(--color-disabled);
+  cursor: not-allowed;
+}
+
+.messageRow {
+  display: flex;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.userRow {
+  justify-content: flex-end;
+}
+
+.assistantRow {
+  justify-content: flex-start;
+}
+
+.bubble {
+  width: fit-content;
+  max-width: min(80%, 680px);
+  padding: 12px 14px;
+  border-radius: 16px;
+  font-size: 16px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.userBubble {
+  border-bottom-right-radius: 5px;
+  background: var(--color-accent);
+  color: #ffffff;
+}
+
+.assistantBubble {
+  border: 1px solid var(--color-line);
+  border-bottom-left-radius: 5px;
+  background: var(--color-surface);
+}
+
+.errorBubble {
+  border: 1px solid var(--color-recording);
+  color: var(--color-text);
+}
+
+.pendingText {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+}
+
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 3px solid var(--color-line);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.eventList {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.eventCard {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: #fffafd;
+}
+
+.eventKind {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.eventCard strong {
+  font-weight: 600;
+}
+
+.eventCard > span:not(.eventKind) {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.draftCard {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--color-accent);
+  border-radius: 12px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.draftCard strong {
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.quickReplies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.quickReplies button {
+  min-width: 56px;
+  min-height: 40px;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-accent-soft);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.quickReplies button:hover {
+  background: #f6c8d9;
+}
+
+.audioPlayer {
+  display: block;
+  width: min(100%, 320px);
+  height: 40px;
+  margin-top: 12px;
+}
+
+.recordingTranscript {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  background: var(--color-surface);
+}
+
+.recordingIndicator {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-recording);
+  box-shadow: 0 0 0 5px #f4b9c4;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.recordingTranscript div {
+  display: grid;
+  gap: 2px;
+}
+
+.recordingTranscript strong {
+  font-weight: 600;
+}
+
+.recordingTranscript span:last-child {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+@keyframes pulse {
+  50% {
+    box-shadow: 0 0 0 8px #f4b9c4;
+  }
+}
+
+.notice {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-recording);
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.notice button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 22px;
+}
+
+.composer {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 0 6px;
+  background: var(--color-background);
+}
+
+.composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 54px;
+  max-height: 144px;
+  resize: vertical;
+  padding: 14px 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.composer textarea::placeholder {
+  color: var(--color-muted);
+  opacity: 1;
+}
+
+.composer textarea:disabled {
+  background: var(--color-disabled-surface);
+  color: var(--color-muted);
+  opacity: 1;
+}
+
+.voiceButton {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #ffffff;
+  cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.voiceButton:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+
+.voiceButton:disabled {
+  background: var(--color-disabled);
+  cursor: wait;
+}
+
+.voiceButton svg {
+  width: 25px;
+  height: 25px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.sendButton {
+  background: var(--color-accent);
+}
+
+.recordingButton {
+  outline: 6px solid #f4b9c4;
+  background: var(--color-recording);
+}
+
+.recordingButton svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.characterCount {
+  position: absolute;
+  right: 72px;
+  bottom: 0;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.sendingHint {
+  position: absolute;
+  right: 0;
+  bottom: -20px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.footerHint {
+  padding: 2px 0 10px;
+  color: var(--color-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (min-width: 700px) {
+  .appShell {
+    padding: 0 28px;
+  }
+
+  .header {
+    min-height: 100px;
+  }
+
+  .conversation {
+    gap: 16px;
+    padding-bottom: 28px;
+  }
+
+  .suggestions {
+    gap: 12px;
+  }
+
+  .suggestion {
+    font-size: 16px;
+  }
+
+  .bubble {
+    padding: 14px 18px;
+    font-size: 17px;
+  }
+
+  .composer {
+    gap: 12px;
+    padding-top: 16px;
+  }
+}
+
+@media (max-width: 420px) {
+  .appShell {
+    padding: 0 12px;
+  }
+
+  .header {
+    min-height: 76px;
+  }
+
+  .voiceStatus {
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  .bubble {
+    max-width: 88%;
+  }
+
+  .composer textarea {
+    min-height: 50px;
+    padding: 12px 14px;
+    font-size: 15px;
+  }
+
+  .voiceButton {
+    width: 50px;
+    height: 50px;
+  }
+
+  .welcome p {
+    font-size: 14px;
+  }
+}

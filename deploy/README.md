@@ -1,7 +1,7 @@
-# deploy: инфраструктура и голосовые сервисы
+# deploy: инфраструктура, голосовые сервисы и web
 
-Postgres (pgvector) + S3 (RustFS) + `stt`/`tts` в контейнерах. `TaskManager` и `web`
-запускаются на хосте и ходят на `localhost`.
+Postgres (pgvector) + S3 (RustFS) + `stt`/`tts`/`web` в контейнерах. `TaskManager`
+пока запускается на хосте; web проксирует к нему `/api/`.
 
 ## Запуск
 
@@ -11,10 +11,11 @@ docker compose up -d --build        # postgres/s3 healthy, s3-init exited (0)
 docker compose ps
 ```
 
-Голосовые сервисы собираются из `../src/stt` и `../src/tts`. Первая сборка STT
-скачивает модель Whisper `base` (~150 МБ), поэтому занимает заметно больше времени.
+`stt`, `tts` и `web` собираются из `../src/stt`, `../src/tts` и `../src/web`.
+Первая сборка STT скачивает модель Whisper `base` (~150 МБ), поэтому занимает заметно
+больше времени.
 
-Только инфраструктура (без голосовых сервисов):
+Только инфраструктура (без приложений):
 
 ```bash
 docker compose up -d postgres s3 s3-init
@@ -27,9 +28,20 @@ docker compose up -d postgres s3 s3-init
 | RustFS Console | `http://localhost:9001`, те же ключи |
 | STT | `http://127.0.0.1:8010` (`STT_PORT`), healthcheck `GET /health` |
 | TTS | `http://127.0.0.1:8020` (`TTS_PORT`), healthcheck `GET /health` |
+| Web | `http://127.0.0.1:8080` (`WEB_PORT`), healthcheck `GET /healthz` |
 
 Если `5432` занят (например, локальным Postgres), в `deploy/.env` поставьте
 `POSTGRES_PORT=55432` и тот же порт в `DATABASE_URL`.
+
+### Web и TaskManager
+
+По умолчанию `TASKMANAGER_URL=http://host.docker.internal:5000` — web проксирует
+`/api/` на TaskManager, запущенный на хосте. Если TaskManager слушает другой порт,
+поправьте `TASKMANAGER_URL` в `deploy/.env`. После контейнеризации TaskManager
+поставьте `TASKMANAGER_URL=http://taskmanager:8080`.
+
+На Linux TaskManager должен слушать `0.0.0.0`, а не только `localhost`, иначе
+контейнер до него не достучится.
 
 ## Проверка и сброс
 
@@ -39,6 +51,8 @@ curl -sI http://localhost:9000/minio/health/live | head -1          # HTTP/1.1 2
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:9000/audio/  # 403: private
 curl -fsS http://127.0.0.1:8010/health                              # {"status":"ok"}
 curl -fsS http://127.0.0.1:8020/health                              # {"status":"ok"}
+curl -fsS http://127.0.0.1:8080/healthz                             # ok
+curl -fsS http://127.0.0.1:8080/api/v1/health                       # TaskManager через прокси
 docker compose down     # данные живы; down -v — полный сброс
 ```
 
