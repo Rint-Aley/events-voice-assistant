@@ -31,7 +31,7 @@
 | `task-manager/implementation.md` | 1 | стек, solution, проекты, зависимости, EF Core, Quartz 4.x, тесты | начинаешь писать бэкенд |
 | `task-manager/prompts.md` | 1 | готовые промпты по задачам бэкенда | запускаешь агента на очередную задачу |
 | `assistant_replies.md` | 1 | авторитетные тексты ответов ассистента | пишешь ответы, TTS или UI-копирайт |
-| `infra.md` | 1.1 | Postgres + pgvector, S3/RustFS, presigned, compose | поднимаешь окружение |
+| `infra.md` | 1.2 | Postgres + pgvector, S3/RustFS, presigned, compose | поднимаешь окружение |
 | `contracts/README.md` | набор 2.1 | правила HTTP-обмена, таймауты, ретраи, владельцы схем | добавляешь или меняешь вызов между сервисами |
 | `contracts/http-api.md` | 1.1 | web ↔ TaskManager: upload, messages, turns, draft cancel, SSE | делаешь фронтенд или API |
 | `contracts/*.json` | 2.1 | схемы `stt`/`nlu`/`tts` (request/response) и `error.json` | нужен точный формат тела |

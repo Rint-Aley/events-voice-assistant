@@ -60,4 +60,4 @@ curl -X POST http://127.0.0.1:8010/v1/transcribe \
 - **Порт:** `8010`.
 - **Docker-образ:** `docker build -t todo-stt src/stt`, запуск — `docker run -p 8010:8010 todo-stt`.
 - **Локальный запуск:** `pip install -r src/stt/requirements.txt`, затем `uvicorn app:app --app-dir src/stt --port 8010`. Нужны установленные `ffmpeg` и `ffprobe`.
-- **Запуск всех сервисов** через `docker compose` появится вместе с compose-файлом на следующем шаге.
+- **Через compose:** из `deploy/` — `docker compose up -d --build voice-stt`; Postgres и S3 поднимутся по `depends_on`. Проверка — `curl -fsS http://127.0.0.1:8010/health`.

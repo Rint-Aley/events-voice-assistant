@@ -58,4 +58,4 @@ curl -X POST http://127.0.0.1:8020/v1/synthesize \
 - **Порт:** `8020`.
 - **Docker-образ:** `docker build -t todo-tts src/tts`, запуск — `docker run -p 8020:8020 -e S3_ENDPOINT=... todo-tts`.
 - **Локальный запуск:** `pip install -r src/tts/requirements.txt`, затем `uvicorn app:app --app-dir src/tts --port 8020`. Нужны доступный S3 и переменные `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_TTS`, `S3_REGION`.
-- **Запуск всех сервисов** через `docker compose` появится вместе с compose-файлом на следующем шаге.
+- **Через compose:** из `deploy/` — `docker compose up -d --build voice-tts`; S3 и `s3-init` поднимутся по `depends_on`. Проверка — `curl -fsS http://127.0.0.1:8020/health`.

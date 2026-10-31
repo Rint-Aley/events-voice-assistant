@@ -85,6 +85,61 @@ services:
     networks:
       - todo-net
 
+  voice-stt:
+    build:
+      context: ../src/stt
+      dockerfile: Dockerfile
+    container_name: voice-stt
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${STT_PORT:-8010}:8010"
+    extra_hosts:
+      - "localhost:host-gateway"
+    environment:
+      STT_MODEL: ${STT_MODEL:-base}
+      STT_DEADLINE_SECONDS: ${STT_DEADLINE_SECONDS:-25}
+    depends_on:
+      s3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 90s
+    networks:
+      - todo-net
+
+  voice-tts:
+    build:
+      context: ../src/tts
+      dockerfile: Dockerfile
+    container_name: voice-tts
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${TTS_PORT:-8020}:8020"
+    environment:
+      S3_ENDPOINT: http://s3:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-todo-s3}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-todo-s3-secret}
+      S3_BUCKET_TTS: ${S3_BUCKET_TTS:-tts}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      TTS_DEFAULT_VOICE: ${TTS_DEFAULT_VOICE:-ru-RU-SvetlanaNeural}
+      TTS_DEFAULT_FORMAT: ${TTS_DEFAULT_FORMAT:-mp3}
+      TTS_TIMEOUT_SECONDS: ${TTS_TIMEOUT_SECONDS:-20}
+    depends_on:
+      s3:
+        condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/health')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - todo-net
+
 networks:
   todo-net:
     name: todo-net

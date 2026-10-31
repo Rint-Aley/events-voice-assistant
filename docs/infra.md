@@ -1,12 +1,13 @@
 # infra
 
-Версия: 1.1. Владелец: infra. Основано на `docs/architecture.md` v0.10.
+Версия: 1.2. Владелец: infra. Основано на `docs/architecture.md` v0.10.
 
 ## 1. Границы
 
-`deploy/docker-compose.yml` поднимает только зависимости: Postgres и S3.
-Приложения (`web`, `TaskManager`, `stt`, `nlu`, `tts`) запускаются локально и ходят
-на `localhost`; в будущем они могут быть упакованы в контейнеры без изменения контрактов.
+`deploy/docker-compose.yml` поднимает инфраструктуру (Postgres и S3) и голосовые
+сервисы `stt`/`tts`. Приложения `web` и `TaskManager` запускаются локально и ходят
+на `localhost`; в будущем они тоже могут быть упакованы в контейнеры без изменения
+контрактов.
 
 Брокер не используется. Схему БД, таблицы, колонку `vector` и HNSW-индекс создаёт TaskManager;
 infra отвечает только за расширение `vector` и бакеты. Размерность вектора — `TBD(BLOCKING)`:
@@ -52,11 +53,15 @@ CORS для браузерных presigned PUT/GET включён на уров�
   `stt`/`tts`), а не TaskManager.
 - `Host` входит в подпись SigV4. Готовый URL нельзя переписывать на `s3:9000`
   или `127.0.0.1` — подпись перестанет совпадать.
-- `s3:9000` (`S3_INTERNAL_ENDPOINT`) — только для будущих контейнеров внутри `todo-net`.
-  Наружу и в presigned URL это имя не отдаётся.
-- Если позже TaskManager останется на хосте, а `stt`/`tts` уедут в контейнеры,
-  генерируются отдельные presigned URL на потребителя: браузеру — `localhost:9000`,
-  сервисам — `s3:9000`. Один URL на всех не подходит.
+- `s3:9000` (`S3_INTERNAL_ENDPOINT`) — адрес S3 внутри `todo-net`. Им пользуется
+  контейнер `tts` для загрузки файлов; в presigned URL это имя не отдаётся.
+- `stt` получает presigned URL от TaskManager. Сейчас ссылка подписывается на
+  `localhost:9000`, поэтому контейнеру `voice-stt` добавлен
+  `extra_hosts: localhost:host-gateway`: имя `localhost` внутри контейнера указывает
+  на хост, и подпись SigV4 (включая `Host`) совпадает.
+- Альтернатива на будущее — отдельные presigned URL на потребителя: браузеру —
+  `localhost:9000`, сервисам — `s3:9000`; один URL на всех без маппинга `localhost`
+  не подходит.
 - TTL: upload 600 с, download 900 с. После истечения S3 отвечает 403, объект остаётся.
 - `content_type` объекта определяется по расширению `object_key`; `HeadObject` не вызывается.
   Неизвестное или отсутствующее расширение — `application/octet-stream`.
@@ -72,28 +77,33 @@ CORS для браузерных presigned PUT/GET включён на уров�
 
 Все переменные и локальные дефолты — в `deploy/.env.example`. Compose читает
 `POSTGRES_*`, `S3_PORT`, `S3_CONSOLE_PORT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`,
-`S3_REGION`, `S3_BUCKET_*`, `S3_CORS_ALLOWED_ORIGINS`, `AUDIO_RETENTION_DAYS`.
+`S3_REGION`, `S3_BUCKET_*`, `S3_CORS_ALLOWED_ORIGINS`, `AUDIO_RETENTION_DAYS`,
+`STT_PORT`, `STT_MODEL`, `STT_DEADLINE_SECONDS`, `TTS_PORT`, `TTS_DEFAULT_VOICE`,
+`TTS_DEFAULT_FORMAT`, `TTS_TIMEOUT_SECONDS`.
 `S3_PUBLIC_*`, `S3_ENDPOINT`, `S3_INTERNAL_ENDPOINT`, `DATABASE_URL` и TTL — контракт
-для конфигов приложений; compose их не использует.
+для конфигов приложений; внутри контейнера `tts` используется `S3_ENDPOINT=s3:9000`.
 
 ## 6. Проверка
 
 ```bash
 docker compose -f deploy/docker-compose.yml config --quiet
-cd deploy && docker compose up -d && docker compose ps
+cd deploy && docker compose up -d --build && docker compose ps
 docker compose exec -T postgres psql -U todo -d todo -tAc "select extversion from pg_extension where extname='vector'"
 curl -sI http://localhost:9000/minio/health/live
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:9000/audio/
+curl -fsS http://127.0.0.1:8010/health
+curl -fsS http://127.0.0.1:8020/health
 docker compose down -v
 ```
 
-Ожидается: compose без ошибок; оба сервиса `healthy` меньше чем за 60 с; версия `vector`
-непустая; health `200`; анонимный доступ к `audio` — `403`.
+Ожидается: compose без ошибок; `postgres`, `s3`, `voice-stt`, `voice-tts` в статусе
+`healthy`, `todo-s3-init` завершился с кодом `0`; версия `vector` непустая; health
+S3 — `200`; анонимный доступ к `audio` — `403`; health STT/TTS — `{"status":"ok"}`.
 
 ## 7. Отложено
 
 - демо по LAN или HTTPS: нужен внешний IP/домен, публикация портов не только на loopback,
   TLS или reverse proxy;
 - общие ключи S3 для `stt`/`tts` вместо presigned URL (см. §4);
-- контейнеризация приложений и разделение public/internal endpoint на consumers;
+- контейнеризация `TaskManager` и `web` и разделение public/internal endpoint на consumers;
 - production-hardening: секреты вне `.env`, ротация ключей, ограниченные IAM-политики.
