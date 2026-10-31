@@ -1,10 +1,13 @@
 # TaskManager
 
-Версия: 1. Владелец: бэкенд. Основано на `docs/architecture.md` v0.7.
+Версия: 1.1. Владелец: бэкенд. Основано на `docs/architecture.md` v0.10.
 
 Спека описывает внутреннее устройство TaskManager: модули, машину состояний, фоновые задачи,
 взаимодействие с `stt`/`nlu`/`tts` и схему данных. JSON-схемы в этот файл не входят: здесь
 только смысл полей, точные контракты — в `docs/contracts/`.
+
+Правила реализации — в `implementation.md`. Если этот файл и `implementation.md`
+расходятся, для кода бэкенда приоритет у `implementation.md`.
 
 ---
 
@@ -38,32 +41,74 @@ MVP-допущения, зашитые в конфиг:
 
 ---
 
-## 2. Модули
+## 2. Модули и адаптеры
 
-Один процесс, модульный монолит. Зависимости строго в одну сторону:
+Один процесс, модульный монолит. Модуля два — `Turns` и `Events`; вокруг них — адаптеры
+`Api` и `Infrastructure`. Планировщик — внутренняя библиотека `Turns.Application`, а не
+адаптер (§5).
 
-```
-http ──► fsm ──► domain
-          │
-          ├──► jobs (планировщик, наружу не отдаёт ничего)
-          └──► sse
-```
+### 2.1 Модули
 
-| Модуль | Ответственность | Знает про |
+| Модуль | Ответственность | Таблицы |
 |---|---|---|
-| `http` | маршруты, валидация входа, коды ответов | `fsm`, `sse` |
-| `fsm` | состояния хода, переходы, сборка ответа, транзакции | `domain`, `jobs`, `sse` |
-| `domain` | операции над `events`, валидация, поиск, pgvector | ничего, кроме своей БД |
-| `jobs` | планировщик: постановка, ретраи, периодические тики | `fsm` (через обработчики) |
-| `sse` | подписки на ход, доставка событий | ничего, кроме шины внутри процесса |
+| `Turns` | состояния хода, переходы, транзакции, сборка ответа, политика фоновых задач | `turns`, `drafts`, `answers`, `answer_events`, `domain_commands` |
+| `Events` | операции над `events`, валидация, поиск, pgvector | `events` |
+
+Каждый модуль разделён на проекты:
+
+```
+src/TaskManager/Modules/
+  Turns/
+    Turns.Domain/          состояние и правила хода, черновик, ответ
+    Turns.Application/     сценарии, порты, политика Quartz-задач
+  Events/
+    Events.Domain/         событие, статусы, конфликты, правила поиска
+    Events.Application/    создание, выборка, поиск, порты
+```
+
+`Turns.Application` может зависеть от `Events.Application` и `Events.Domain`.
+Обратной зависимости нет.
+
+### 2.2 Адаптеры
+
+| Адаптер | Направление | Ответственность | Реализует порт |
+|---|---|---|---|
+| `Api` | вход + поток | маршруты, валидация входа, коды ответов, SSE-фрейминг, хаб подписок | `TurnStream` |
+| `Infrastructure/Clients` | выход | HTTP-вызовы `stt`/`nlu`/`tts` | `SttClient`, `NluClient`, `TtsClient` |
+| `Infrastructure/Storage` | выход | presigned URL и ключи S3 | `ObjectStorage` |
+| `Infrastructure/Persistence` | выход | EF Core, репозитории, запросы, миграции | репозитории и query-порты |
+| `Infrastructure/Scheduler` | выход | Quartz 4.x, jobs, retry policy, listeners | `JobScheduler` |
+
+Хаб подписок — внутренняя часть `Api`; отдельного модуля `sse` нет. `Turns.Application`
+публикует события только через порт `TurnStream`.
+
+### 2.3 Зависимости
+
+Стрелка — импорт:
+
+```
+TaskManager.Api ───────────────┐
+TaskManager.Infrastructure ────┼──► Turns.Application ──► Turns.Domain
+                               │          │
+                               │          └──────────► Events.Application ──► Events.Domain
+                               └──────────────────────► Events.Application
+```
+
+В рантайме вызовы идут в обе стороны через порты: `Api → Turns.Application.submit_text()`,
+`Turns.Application → Api.publish()`. Импортов из `Turns.Application` в адаптеры нет: порт
+объявляет тот, кому он нужен.
 
 Правила:
 
-- `domain` не импортирует `fsm`, не знает про HTTP, SSE, джобы и состояния ходов;
-- `fsm` не пишет в `events` напрямую и не строит SQL по доменным таблицам;
-- транспорт тонкий: вся логика перехода — в `fsm`;
+- `Events.Domain` не импортирует `Turns`, не знает про HTTP, SSE, EF Core, Quartz и состояния ходов;
+- `Turns.Domain` не импортирует адаптеры и `Events.Application`;
+- `Turns.Application` не импортирует `TaskManager.Api` и `TaskManager.Infrastructure`;
+- `Events.Application` не импортирует `Turns.Application` и `Turns.Domain`;
+- только Application-сценарии открывают и коммитят транзакции; Domain принимает уже готовые данные;
+- HTTP/clients/storage-адаптеры не содержат доменных правил; SQL живёт только в EF-репозиториях;
+- транспорт тонкий: вся логика перехода — в `Turns.Application`;
 - домен возвращает типизированные ошибки (`TitleRequired`, `InvalidPeriod`,
-  `TimeInPast`), `fsm` превращает их в ответ пользователю.
+  `TimeInPast`), `Turns.Application` превращает их в ответ пользователю.
 
 ---
 
@@ -203,8 +248,12 @@ COMPLETED ──► job tts:{answer_id} ──► audio дописывается
 
 ## 5. Фоновые задачи
 
-Планировщик — библиотека с персистентным стором в том же Postgres (Quartz.NET или аналог).
-Своей таблицы задач TaskManager не держит.
+Планировщик — Quartz.NET 4.x с персистентным стором в том же Postgres.
+Своей таблицы задач TaskManager не держит. Это внутренняя деталь `Turns.Application`, а не адаптер:
+планировщик обслуживает собственный процесс, пишет только в свои таблицы, а его типы не
+выходят за пределы `Turns.Application/Jobs`. Вызовы библиотеки спрятаны за внутренним интерфейсом
+`IJobScheduler` (`schedule`, `exists`, `remove`) — он нужен для тестов и архитектурным портом
+не является.
 
 ### 5.1 Задачи
 
@@ -216,9 +265,10 @@ COMPLETED ──► job tts:{answer_id} ──► audio дописывается
 | `apply` | singleton, 1 с | — | 5 с | — | следующий тик |
 | `reconciler` | singleton, 10 с | — | 10 с | — | следующий тик |
 
-Ретраи — не `sleep` внутри задачи, а перепланирование того же ключа с задержкой (1 с, 4 с) и
-номером попытки в данных задачи. Повторяются сетевые ошибки, таймауты и `5xx`; `4xx` — сразу
-окончательный отказ.
+Ретраи — встроенная retry policy Quartz 4.x, без собственного цикла и `sleep` внутри задачи.
+Повторяются сетевые ошибки, таймауты и `5xx`; `4xx` — permanent failure без повтора.
+Финальная обработка — `ITriggerListener.TriggerRetriesExhausted`: перевести ход в `FAILED`
+с нужным кодом или пометить `audio_status = failed`.
 
 ### 5.2 Обработчик `stt`
 
@@ -234,7 +284,14 @@ COMPLETED ──► job tts:{answer_id} ──► audio дописывается
 
 1. Прочитать ход и активный черновик (последний ход в `NEEDS_CLARIFICATION`).
 2. `POST` в `nlu`: текст, текущий момент, таймзона, черновик.
-3. Разобрать план по действию:
+3. Проверить и нормализовать `entities`:
+   - `starts_on` и `starts_at` принимаются как строки, а не как `DateOnly`/`TimeOnly`:
+     несуществующая дата или время не должны ронять десериализацию;
+   - невалидную дату/время не кладём в черновик, добавляем `date`/`time` в `missing`
+     и задаём общий вопрос;
+   - если `description` есть, а `embedding` отсутствует или невалиден — ход уходит в
+     `FAILED` / `NLU_FAILED`, событие не создаётся, черновик не меняется.
+4. Разобрать план по действию:
    - **чтение** — выполнить запрос домена, собрать ответ и `answer_events`, транзакция:
      `answers` + `turns.state = COMPLETED`, поставить `tts`;
    - **запись** — транзакция: `plan`, `domain_commands` (по одной на запись, `seq` по порядку),
@@ -243,9 +300,12 @@ COMPLETED ──► job tts:{answer_id} ──► audio дописывается
      `state = NEEDS_CLARIFICATION`;
    - **не понял** — `answers` с просьбой переформулировать, `state = COMPLETED`.
 
-Если описание есть, эмбеддинг обязателен: описание без вектора — ошибка контракта, ход
-уходит в `FAILED` / `NLU_FAILED`. Если описания нет вовсе, нет и вектора — запись создаётся,
-но в семантическом поиске не участвует.
+`nlu` может вернуть необязательные `type_filter` (`meeting` / `task` / `reminder`) и
+`is_deadline`. Старый NLU их не присылает: `type_filter = null` означает «все типы»,
+`is_deadline = false` — обычная дата. Новые значения `action` не добавляются.
+
+Черновик сбрасывается на любом интенте, кроме `create_*` и `clarify`. `source_text`
+черновика пополняется исходной фразой пользователя через `; `.
 
 ### 5.4 Применение команд
 
@@ -264,7 +324,7 @@ select id, turn_id
 
 1. `select ... from turns where id = :turn_id for update` — проверить `state = APPLYING`;
 2. `select` команды хода со `status = 'pending'` по возрастанию `seq` (под блокировкой);
-3. применить каждую через `domain` (создание записи, позже — обновление);
+3. применить каждую через `Events.Application` (создание записи, позже — обновление);
 4. вставить `answers` и `answer_events` (порядок — как в плане);
 5. `domain_commands.status = 'applied'`, `applied_at = now()`;
 6. `turns.state = COMPLETED`;
@@ -332,8 +392,9 @@ select id, turn_id
 
 Получаем: `action` (создать задачу / создать напоминание / создать встречу / выборка за
 период / поиск / уточнение / не понял), `entities` (описание, дата, время,
-продолжительность, период, поисковый запрос), `confidence`, `embedding`, `missing`
-(чего не хватает для уточнения), `question` (текст уточняющего вопроса).
+продолжительность, период, поисковый запрос, необязательные `type_filter` и `is_deadline`),
+`confidence`, `embedding`, `missing` (чего не хватает для уточнения), `question`
+(текст уточняющего вопроса).
 
 Пишем: `turns.plan` (сырой план — для отладки), `domain_commands.payload` (нормализованные
 поля + эмбеддинг) либо `drafts` (недостающие слоты).
@@ -422,8 +483,9 @@ create table domain_commands (
 create index domain_commands_pending on domain_commands (status, next_attempt_at);
 ```
 
-`payload` для `event.create`: `kind`, `description`, `embedding`, `starts_on`, `starts_at`,
-`duration`. Поля нормализует `fsm` из плана `nlu`.
+`payload` для `event.create`: `kind`, `description`, `source_text`, `embedding`, `starts_on`,
+`starts_at`, `duration`, `is_deadline`. Поля нормализует `Turns.Application` из плана `nlu`.
+`description` — обязательный заголовок; `source_text` — исходные фразы пользователя.
 
 ### 7.4 `events`
 
@@ -432,12 +494,14 @@ create table events (
     id              uuid primary key default gen_random_uuid(),
     user_id         text not null,              -- константа, сейчас не используется
     kind            text not null,
-    description     text,
-    embedding       vector(1024),               -- размерность = модель эмбеддингов
+    description     text not null,              -- заголовок, обязателен
+    source_text     text,                       -- исходные фразы пользователя
+    embedding       vector,                     -- TBD(BLOCKING): размерность после выбора модели
     embedding_model text,
     starts_on       date,
-    starts_at       timetz,
-    duration        interval,
+    starts_at       time,                       -- локальное время в TIMEZONE
+    duration        interval,                   -- только для встреч
+    is_deadline     boolean not null default false,
     status          text not null default 'active',
     source_turn_id  uuid references turns(id),
     created_at      timestamptz not null default now(),
@@ -445,8 +509,6 @@ create table events (
 
     constraint events_kind_check check (kind in ('task', 'reminder', 'meeting')),
     constraint events_status_check check (status in ('active', 'done', 'cancelled')),
-    constraint events_description_embedding_pair
-        check ((description is null) = (embedding is null)),
     constraint events_model_pair
         check ((embedding is null) = (embedding_model is null)),
     constraint events_time_requires_date
@@ -454,49 +516,63 @@ create table events (
     constraint events_duration_requires_time
         check (duration is null or starts_at is not null),
     constraint events_duration_positive
-        check (duration is null or duration > interval '0')
+        check (duration is null or duration > interval '0'),
+    constraint events_deadline_only_task
+        check (not is_deadline or kind = 'task')
 );
 
 create index events_by_date on events (starts_on, starts_at);
 create index events_by_status on events (status, starts_on);
 create index events_by_source_turn on events (source_turn_id);
-create index events_embedding_hnsw on events using hnsw (embedding vector_cosine_ops);
+-- create index events_embedding_hnsw on events using hnsw (embedding vector_cosine_ops);
+-- ^ выполнить только после фиксации EMBEDDING_MODEL и EMBEDDING_DIM
 ```
 
 Правила:
 
-- `description` и `embedding` живут парой: нет описания — нет и вектора. Запись без вектора
-  не участвует в семантическом поиске, но находится по дате и типу.
+- `description` — обязательный заголовок для всех типов. В контракте `nlu` это поле
+  называется `description`, в текстах ответов — `{title}`.
+- `source_text` хранит исходные фразы пользователя, включая уточнения, через `; `. Вектор
+  считается только по `description`.
+- `description` без валидного `embedding` — `NLU_FAILED`; событие не создаётся.
 - `starts_on` / `starts_at` необязательны: «позвонить маме» — задача без срока.
-- `starts_at` — `time with time zone`: смещение хранится вместе со временем. Для MVP считаем,
-  что пользователь в одной зоне; смещение берётся на дату события.
-- `duration` — только для встреч и только вместе со временем.
-- `status` создаётся в `active`; переходы в `done`/`cancelled` — LATER.
+- `starts_at` — локальное `time` без зоны; зона берётся из `TIMEZONE`. Переходы на летнее
+  время игнорируются.
+- `duration` — только для встреч и только вместе со временем; по умолчанию 60 минут.
+- `is_deadline = true` — только для задач; `starts_on` означает «сделать до».
+- `status` создаётся в `active`; переходы в `done`/`cancelled` — LATER. Поиск и список
+  показывают `active + done`, `cancelled` исключают.
 
 ### 7.5 `drafts`
 
 ```sql
 create table drafts (
-    id          uuid primary key default gen_random_uuid(),
-    turn_id     uuid not null unique references turns(id) on delete cascade,
-    kind        text,
-    description text,
-    embedding   vector(1024),
-    starts_on   date,
-    starts_at   timetz,
-    duration    interval,
-    created_at  timestamptz not null default now(),
-    updated_at  timestamptz not null default now(),
-
-    constraint drafts_description_embedding_pair
-        check ((description is null) = (embedding is null))
+    id                   uuid primary key default gen_random_uuid(),
+    turn_id              uuid not null unique references turns(id) on delete cascade,
+    kind                 text,
+    description          text,
+    source_text          text,
+    embedding            vector,                -- TBD(BLOCKING), как у events
+    starts_on            date,
+    starts_at            time,
+    duration             interval,
+    is_deadline          boolean not null default false,
+    clarification_round  int not null default 0,
+    created_at           timestamptz not null default now(),
+    updated_at           timestamptz not null default now()
 );
 ```
 
 Черновик — недособранный запрос: система не создала запись, потому что не хватает слотов.
-Он привязан к ходу в `NEEDS_CLARIFICATION`, а не к сессии. После успешного создания записи
-удаляется; если пользователь ушёл в другую тему — тоже удаляется (старый ход остаётся
-`NEEDS_CLARIFICATION` с пустой ссылкой).
+Он привязан к ходу в `NEEDS_CLARIFICATION`, а не к сессии. Невалидные дата и время в
+черновик не попадают: они удаляются из слотов и добавляются в `missing`.
+
+`source_text` пополняется исходной фразой каждого хода через `; `. `clarification_round`
+считает раунды уточнений; после второго система завершает ход текстом
+«Не удалось уточнить. Сформулируй запрос иначе.» и удаляет черновик.
+
+Черновик удаляется после успешного создания записи, при отмене через HTTP и при смене
+темы. Старый ход остаётся `NEEDS_CLARIFICATION` с пустой ссылкой.
 
 ### 7.6 `answers`
 
@@ -505,6 +581,8 @@ create table answers (
     id                uuid primary key default gen_random_uuid(),
     turn_id           uuid not null unique references turns(id) on delete cascade,
     text              text not null,
+    total_count       int,
+    warnings          jsonb,
     audio_object_key  text,
     audio_status      text not null default 'skipped',
     audio_duration_ms int,
@@ -514,6 +592,9 @@ create table answers (
         check (audio_status in ('pending', 'ready', 'failed', 'skipped'))
 );
 ```
+
+`total_count` заполняется только для списка: сколько всего записей подходит под период и
+фильтры до лимита. `warnings` — предупреждения, сейчас только пересечения встреч.
 
 `audio_status`: `pending` — задача поставлена, `ready` — ключ есть, `failed` — озвучка не
 удалась, `skipped` — озвучка не требовалась.
@@ -532,11 +613,24 @@ create table answer_events (
 Нужна для выборки за период и поиска: ответ ссылается на список записей, `position` держит
 порядок (для поиска — по убыванию близости).
 
-### 7.8 Эмбеддинги и поиск
+### 7.8 Эмбеддинги, поиск и список
 
-- Вектор приходит от `nlu` для всех действий и сохраняется как есть, без пересчёта.
-- Поиск: `order by embedding <=> :query_vector` с фильтром по `status = 'active'` и лимитом.
-- Порог отсечения и гибридный поиск (вектор + полнотекст) — LATER; сейчас top-N.
+- Вектор приходит от `nlu` и сохраняется как есть, без пересчёта. Эмбеддинг считается
+  только по `description`; `source_text` для вектора не используется.
+- `EMBEDDING_MODEL` и `EMBEDDING_DIM` — `TBD(BLOCKING)`. До их фиксации не создавать
+  `vector(N)` и HNSW-индекс.
+- Поиск: `order by embedding <=> :query_vector`, фильтр `status in ('active', 'done')`,
+  `cancelled` исключён, лимит 3.
+- `type_filter`: `meeting` — только встречи; `task` — задачи и напоминания;
+  `reminder` — только напоминания; `null` — все типы.
+- Период поиска необязателен; если задан, используется по `starts_on`.
+- Пустой поиск: `COMPLETED`, пустой `events`, текст «Ничего похожего не нашла».
+- Список за период: сначала записи с датой по `starts_on`, затем по `starts_at`; записи
+  без времени идут в конце своего дня. Задачи без даты идут после датированных в
+  отдельном блоке «Без даты».
+- Лимит списка — 3 записи суммарно, включая блок «Без даты». `total_count` считает все
+  подходящие записи до лимита; UI показывает «И ещё N».
+- Порог отсечения и гибридный поиск (вектор + полнотекст) — LATER; сейчас top-3.
 - Смена модели = смена размерности = новая колонка и переиндексация; поэтому
   `embedding_model` хранится рядом с вектором.
 
@@ -551,7 +645,7 @@ create table answer_events (
 | `event` | `data` |
 |---|---|
 | `state` | `{"state": "INTERPRETING"}` |
-| `answer` | `{"text": "...", "events": [...]}` |
+| `answer` | `{"text": "...", "events": [...], "total_count": 5, "warnings": [...]}` |
 | `audio` | `{"url": "...", "duration_ms": 6100}` |
 | `error` | `{"code": "STT_FAILED", "message": "..."}` |
 
@@ -561,7 +655,11 @@ create table answer_events (
   есть, затем `audio`, если готово. Дальше — живые события. Это заменяет `Last-Event-ID`:
   журнал событий не хранится, а снапшот всегда актуален.
 - `answer` и `error` взаимоисключающие, приходят один раз.
-- `audio` приходит после `answer` и может не прийти — это не ошибка.
+- `answer` с текстом отдаётся сразу после готовности ответа, не дожидаясь `tts`.
+- `audio` приходит после `answer` и может не прийти — это не ошибка. Соединение держится
+  до 30 секунд после `answer`, чтобы дождаться аудио; затем закрывается, синтез продолжается
+  в фоне, клиент может получить аудио через снапшот.
+- `total_count` и `warnings` — необязательные поля; старые клиенты их игнорируют.
 - Терминальный ход: снапшот и закрытие соединения.
 - `: ping` каждые 15 с.
 - Шина подписок — в памяти процесса (одна реплика). Клиент после разрыва переподключается и
@@ -581,6 +679,7 @@ Polling-fallback: `GET /api/v1/turns/{turn_id}` возвращает то же �
 | `POST /api/v1/messages` | создать ход, ответить `202` |
 | `GET /api/v1/turns/{id}` | снапшот хода |
 | `GET /api/v1/turns/{id}/events` | SSE |
+| `DELETE /api/v1/turns/{id}/draft` | отменить черновик, вернуть текст подтверждения |
 | `GET /api/v1/health` | живость, БД, планировщик |
 
 `POST /messages`:
@@ -591,6 +690,14 @@ Polling-fallback: `GET /api/v1/turns/{turn_id}` возвращает то же �
    добьёт `reconciler`.
 4. Ответ `202 {turn_id, state, events_url}`, где `state` — `TRANSCRIBING` для голоса и
    `INTERPRETING` для текста.
+
+`DELETE /turns/{id}/draft`:
+
+- удаляет черновик хода, сам ход остаётся `NEEDS_CLARIFICATION`;
+- возвращает `200 {"text":"Хорошо, не сохраняю"}`;
+- идемпотентен: повторная отмена возвращает тот же текст;
+- `404 TURN_NOT_FOUND`, если хода нет;
+- голосовая отмена в MVP не поддерживается.
 
 ---
 
@@ -626,37 +733,55 @@ HTTP-ошибки (до создания хода): `BAD_REQUEST`, `UNSUPPORTED_
 | `APPLY_TICK_SECONDS` | период применения команд | `1` |
 | `RECONCILE_SECONDS` | период сверки | `10` |
 | `AUDIO_RETENTION_DAYS` | срок жизни аудио в S3 | `7` |
-| `EMBEDDING_DIM` | размерность вектора | по модели `nlu` |
+| `EMBEDDING_MODEL` | модель эмбеддингов | `TBD(BLOCKING)` |
+| `EMBEDDING_DIM` | размерность вектора | `TBD(BLOCKING)` |
+| `SSE_AUDIO_WAIT_SECONDS` | сколько держать SSE после ответа | `30` |
 | `PRESIGN_TTL_SECONDS` | TTL ссылок S3 | `600` / `900` |
+
+`content_type` загруженного объекта определяется по расширению `object_key`, без
+`HeadObject`. Неизвестное расширение — `application/octet-stream`.
 
 ---
 
 ## 12. Как проверить
 
-Юнит-тесты:
+Юнит-тесты — **только Domain**:
 
-- таблица переходов: каждое событие из каждого состояния — разрешено или нет;
-- CAS: параллельные переходы, второй проигрывает;
-- черновик: мерж слотов, удаление после успеха, «другая тема»;
-- дедлайн: ход в `TRANSCRIBING` + просроченный `deadline_at` → `EXPIRED`;
-- раскладка плана `nlu` в `domain_commands` (порядок `seq`, обязательные слоты).
+- `Turns.Domain`: таблица переходов, CAS, черновик, лимит уточнений, отмена, дедлайн;
+- `Events.Domain`: обязательный заголовок, типы и слоты, `is_deadline`, конфликты встреч,
+  `[start, start + duration)`, статусы, правила списка и поиска.
 
-Интеграционные (заглушки `stt`/`nlu`/`tts`):
+Интеграционные тесты — остальное, с реальным Postgres через Testcontainers; `stt`, `nlu`,
+`tts`, S3 и Quartz-планировщик замокированы:
 
 1. Текстовый запрос «создай задачу…» → `INTERPRETING` → `APPLYING` → `COMPLETED`,
    запись в `events`, ответ ссылается на неё.
 2. Голосовой запрос → `TRANSCRIBING` → `INTERPRETING` → `COMPLETED`, аудио ответа приходит
    отдельным событием.
-3. «Что у меня на неделе» → `COMPLETED`, `answer_events` содержит список.
-4. «Найди про встречу с Иваном» → поиск по вектору, порядок по близости.
-5. Уточнение: «создай встречу» → `NEEDS_CLARIFICATION` + черновик; следующий ход с ответом
+3. «Что у меня на неделе» → `COMPLETED`, `answer_events` содержит список, `total_count`
+   учитывает все записи, лимит 3.
+4. Задачи без даты попадают в конец списка, UI группирует их в «Без даты».
+5. «Найди про встречу с Иваном» → поиск по вектору, порядок по близости, лимит 3.
+6. `type_filter`: `meeting`, `task` (задачи + напоминания), `reminder`.
+7. Пустой поиск → `COMPLETED`, пустой `events`, «Ничего похожего не нашла».
+8. Уточнение: «создай встречу» → `NEEDS_CLARIFICATION` + черновик; следующий ход с ответом
    создаёт запись и удаляет черновик.
-6. Падение между коммитом и постановкой задачи → `reconciler` ставит задачу, ход доходит до
-   `COMPLETED`.
-7. Падение посреди `nlu` → задача повторяется, дубля записи нет.
-8. `stt` отвечает `500` трижды → `FAILED` / `STT_FAILED`.
-9. `tts` отвечает `500` трижды → `COMPLETED`, `audio_status = failed`.
-10. Второе сообщение при активном ходе → `409 SESSION_BUSY`.
+9. Невалидная дата/время → слот удаляется, черновик сохраняется, задаётся вопрос.
+10. Прошлое время → clarify с сохранением черновика.
+11. Два раунда уточнений → `COMPLETED`, текст «Не удалось уточнить. Сформулируй запрос
+    иначе.», черновик удалён.
+12. `DELETE /turns/{id}/draft` → `200`, черновик удалён, повтор идемпотентен.
+13. `description` без `embedding` → `FAILED` / `NLU_FAILED`, событие не создано.
+14. Конфликт встреч → событие создано, `warnings` заполнен, текст содержит первую встречу.
+15. Падение между коммитом и постановкой задачи → `reconciler` ставит задачу, ход доходит до
+    `COMPLETED`.
+16. Падение посреди `nlu` → задача повторяется, дубля записи нет.
+17. `stt` отвечает `500` трижды → `FAILED` / `STT_FAILED`.
+18. `tts` отвечает `500` трижды → `COMPLETED`, `audio_status = failed`.
+19. Второе сообщение при активном ходе → `409 SESSION_BUSY`.
+
+Семантический поиск с `vector(N)` блокируется до фиксации `EMBEDDING_MODEL` и
+`EMBEDDING_DIM`.
 
 Ручной сценарий — четыре обязательных кейса из ТЗ: создание задачи/напоминания, создание
 встречи, выборка за период, поиск; плюс относительные даты («завтра», «в пятницу») и
@@ -667,10 +792,11 @@ HTTP-ошибки (до создания хода): `BAD_REQUEST`, `UNSUPPORTED_
 ## 13. Что отложено
 
 - доставка напоминаний (MVP только сохраняет время);
-- редактирование, удаление, отметка выполнения;
-- конфликты встреч и повторяющиеся события;
+- редактирование, удаление, отметка выполнения; переключение статусов — LATER;
+- повторяющиеся события;
+- выбор модели эмбеддингов и размерности — `TBD(BLOCKING)`;
 - мультипользовательность: таблица `sessions`, реальные `session_id`/`user_id`;
 - журнал SSE-событий и честный replay по `Last-Event-ID`;
 - гибридный поиск и пороги отсечения;
-- вынос `domain` в отдельный сервис (тогда `domain_commands` станет настоящим outbox);
+- вынос `Events` в отдельный сервис (тогда `domain_commands` станет настоящим outbox);
 - переход на брокер — `docs/for_investigation.md` §4.
