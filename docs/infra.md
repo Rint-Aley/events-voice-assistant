@@ -1,17 +1,17 @@
 # infra
 
-Версия: 1.4. Владелец: infra. Основано на `docs/architecture.md` v0.10.
+Версия: 1.5. Владелец: infra. Основано на `docs/architecture.md` v0.11.
 
 ## 1. Границы
 
-`deploy/docker-compose.yml` поднимает инфраструктуру (Postgres и S3), сервисы
-`stt`/`tts`/`nlu` и `web`. `TaskManager` пока запускается локально на хосте —
-web проксирует к нему `/api/` через `TASKMANAGER_URL`; после контейнеризации
-TaskManager переключение сводится к этой переменной.
+`deploy/docker-compose.yml` поднимает инфраструктуру (Postgres и S3) и все сервисы:
+`TaskManager`, `stt`, `tts`, `nlu` и `web`. TaskManager слушает `8080` внутри
+`todo-net`; с хоста API доступен через `TASKMANAGER_PORT`, по умолчанию `5000`.
+Web проксирует `/api/` на `http://taskmanager:8080`.
 
 Брокер не используется. Схему БД, таблицы, колонку `vector(1536)` и HNSW-индекс создаёт
-TaskManager; infra отвечает только за расширение `vector` и бакеты. Модель эмбеддингов
-зафиксирована: `text-embedding-3-small`, `EMBEDDING_DIM=1536`.
+TaskManager через EF-миграции; infra отвечает только за расширение `vector` и бакеты.
+Модель эмбеддингов зафиксирована: `text-embedding-3-small`, `EMBEDDING_DIM=1536`.
 
 ## 2. Postgres
 
@@ -46,15 +46,39 @@ Init-скрипт `deploy/postgres/init/00-extensions.sql` содержит то
 CORS для браузерных presigned PUT/GET включён на уровне S3 API:
 `RUSTFS_CORS_ALLOWED_ORIGINS` (по умолчанию `*`), методы PUT/GET/HEAD, заголовки `*`.
 
-## 4. Presigned URL
+## 4. TaskManager
+
+| Параметр | Значение |
+|---|---|
+| Образ | multi-stage `src/TaskManager/Dockerfile`, runtime `mcr.microsoft.com/dotnet/aspnet:10.0` |
+| Внутренний порт | `8080` (`ASPNETCORE_HTTP_PORTS`) |
+| Порт на хосте | `TASKMANAGER_PORT`, по умолчанию `5000`, только `127.0.0.1` |
+| Сборка | контекст `../src/TaskManager` |
+| Миграции | one-shot `taskmanager-migrate` до старта API |
+| Healthcheck | `GET /api/v1/health` (Postgres + Quartz) |
+| Сеть | `todo-net` |
+| Зависимости | `postgres`, `s3`, `s3-init`, `voice-stt`, `voice-tts`, `voice-nlu` |
+
+`taskmanager-migrate` собирается из target `migrations`, применяет EF-миграции и
+завершается. Его строка подключения — `TASKMANAGER_CONNECTION_STRING` с внутренним
+`postgres:5432`; `DATABASE_URL` из `.env` остаётся для запуска на хосте и EF-команд.
+Повторный `docker compose up -d` идемпотентен: EF пропускает уже применённые миграции.
+
+TaskManager монтирует только `todo-net`; томов нет. `QRTZ_*` таблицы Quartz создаёт
+при старте API. Для корректного завершения фоновых задач compose задаёт
+`stop_grace_period: 30s`.
+
+## 5. Presigned URL
 
 - Ссылки подписываются на `S3_PUBLIC_HOST:S3_PUBLIC_PORT`, по умолчанию
-  `localhost:9000`. Это адрес, который увидит потребитель ссылки (браузер или локальный
-  `stt`/`tts`), а не TaskManager.
+  `localhost:9000`. Это адрес, который увидит потребитель ссылки (браузер или
+  `stt`), а не внутренний адрес TaskManager.
 - `Host` входит в подпись SigV4. Готовый URL нельзя переписывать на `s3:9000`
   или `127.0.0.1` — подпись перестанет совпадать.
 - `s3:9000` (`S3_INTERNAL_ENDPOINT`) — адрес S3 внутри `todo-net`. Им пользуется
   контейнер `tts` для загрузки файлов; в presigned URL это имя не отдаётся.
+- TaskManager внутри контейнера получает `S3_ENDPOINT=http://localhost:9000` и только
+  подписывает URL. Сетевых вызовов S3 из TaskManager нет, поэтому `s3:9000` ему не нужен.
 - `stt` получает presigned URL от TaskManager. Сейчас ссылка подписывается на
   `localhost:9000`, поэтому контейнеру `voice-stt` добавлен
   `extra_hosts: localhost:host-gateway`: имя `localhost` внутри контейнера указывает
@@ -73,42 +97,50 @@ CORS для браузерных presigned PUT/GET включён на уров�
 ротации и меняет контракт (`audio_url` → bucket/key). Для браузера presigned URL
 останется в любом случае. Решение отложено.
 
-## 5. Конфигурация
+## 6. Конфигурация
 
 Все переменные и локальные дефолты — в `deploy/.env.example`. Compose читает
 `POSTGRES_*`, `S3_PORT`, `S3_CONSOLE_PORT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`,
 `S3_REGION`, `S3_BUCKET_*`, `S3_CORS_ALLOWED_ORIGINS`, `AUDIO_RETENTION_DAYS`,
-`STT_PORT`, `STT_MODEL`, `STT_DEADLINE_SECONDS`, `TTS_PORT`, `TTS_DEFAULT_VOICE`,
-`TTS_DEFAULT_FORMAT`, `TTS_TIMEOUT_SECONDS`, `NLU_PORT`, `LLM_*`, `EMBEDDING_*`,
-`RULES_ONLY`, `TIMEZONE`, `WEB_PORT`, `TASKMANAGER_URL`.
+`STT_PORT`, `STT_MODEL`, `STT_DEADLINE_SECONDS`, `STT_LANGUAGE`, `TTS_PORT`,
+`TTS_DEFAULT_VOICE`, `TTS_DEFAULT_FORMAT`, `TTS_TIMEOUT_SECONDS`, `NLU_PORT`, `LLM_*`,
+`EMBEDDING_*`, `RULES_ONLY`, `TIMEZONE`, `WEB_PORT`, `TASKMANAGER_PORT`,
+`TASKMANAGER_URL`.
 `S3_PUBLIC_*`, `S3_ENDPOINT`, `S3_INTERNAL_ENDPOINT`, `DATABASE_URL` и TTL — контракт
-для конфигов приложений; внутри контейнера `tts` используется `S3_ENDPOINT=s3:9000`.
+для конфигов приложений; внутри контейнера `tts` используется `S3_ENDPOINT=s3:9000`,
+а TaskManager — публичный `S3_ENDPOINT` для подписи. Строка подключения TaskManager
+в контейнере задаётся через `TASKMANAGER_CONNECTION_STRING`.
 
-## 6. Проверка
+## 7. Проверка
 
 ```bash
 docker compose -f deploy/docker-compose.yml config --quiet
 cd deploy && docker compose up -d --build && docker compose ps
 docker compose exec -T postgres psql -U todo -d todo -tAc "select extversion from pg_extension where extname='vector'"
+docker compose exec -T postgres psql -U todo -d todo -tAc "select count(*) from information_schema.tables where table_name = '__EFMigrationsHistory'"
 curl -sI http://localhost:9000/minio/health/live
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:9000/audio/
 curl -fsS http://127.0.0.1:8010/health
 curl -fsS http://127.0.0.1:8020/health
 curl -fsS http://127.0.0.1:8001/health
+curl -fsS http://127.0.0.1:5000/api/v1/health
 curl -fsS http://127.0.0.1:8080/healthz
 curl -fsS http://127.0.0.1:8080/api/v1/health
+docker compose logs -f taskmanager
 docker compose down -v
 ```
 
 Ожидается: compose без ошибок; `postgres`, `s3`, `voice-stt`, `voice-tts`, `voice-nlu`,
-`web` в статусе `healthy`, `todo-s3-init` завершился с кодом `0`; версия `vector` непустая;
-health S3 — `200`; анонимный доступ к `audio` — `403`; health STT/TTS/NLU — `{"status":"ok"}`;
-`/healthz` web — `ok`, а `/api/v1/health` отвечает TaskManager через прокси.
+`taskmanager`, `web` в статусе `healthy`; `todo-s3-init` и `todo-taskmanager-migrate`
+завершились с кодом `0`; версия `vector` непустая; health S3 — `200`; анонимный доступ
+к `audio` — `403`; health STT/TTS/NLU — `{"status":"ok"}`; TaskManager напрямую и через
+web отвечает `200`; `/healthz` web — `ok`.
 
-## 7. Отложено
+## 8. Отложено
 
 - демо по LAN или HTTPS: нужен внешний IP/домен, публикация портов не только на loopback,
   TLS или reverse proxy;
-- общие ключи S3 для `stt`/`tts` вместо presigned URL (см. §4);
-- контейнеризация `TaskManager` и разделение public/internal endpoint на consumers;
+- общие ключи S3 для `stt`/`tts` вместо presigned URL (см. §5);
+- EF migration bundle вместо SDK target для `taskmanager-migrate`;
+- разделение public/internal endpoint для потребителей presigned URL;
 - production-hardening: секреты вне `.env`, ротация ключей, ограниченные IAM-политики.

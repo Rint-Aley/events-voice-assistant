@@ -32,7 +32,7 @@
 | `task-manager/implementation.md` | 1 | стек, solution, проекты, зависимости, EF Core, Quartz 4.x, тесты | начинаешь писать бэкенд |
 | `task-manager/prompts.md` | 1 | готовые промпты по задачам бэкенда | запускаешь агента на очередную задачу |
 | `assistant_replies.md` | 1 | авторитетные тексты ответов ассистента | пишешь ответы, TTS или UI-копирайт |
-| `infra.md` | 1.4 | Postgres + pgvector, S3/RustFS, presigned, compose | поднимаешь окружение |
+| `infra.md` | 1.5 | Postgres + pgvector, S3/RustFS, presigned, TaskManager в compose | поднимаешь окружение |
 | `stt.md` | — | распознавание речи: faster-whisper, VAD, лимиты | интегрируешь `stt` |
 | `nlu.md` | — | разбор текста: rules + LLM, эмбеддинги | интегрируешь `nlu` |
 | `tts.md` | — | синтез речи: edge-tts, S3-кэш | интегрируешь `tts` |

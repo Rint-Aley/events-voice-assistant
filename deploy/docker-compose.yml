@@ -85,6 +85,22 @@ services:
     networks:
       - todo-net
 
+  taskmanager-migrate:
+    build:
+      context: ../src/TaskManager
+      dockerfile: Dockerfile
+      target: migrations
+    container_name: todo-taskmanager-migrate
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TASKMANAGER_CONNECTION_STRING: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-todo};Username=${POSTGRES_USER:-todo};Password=${POSTGRES_PASSWORD:-todo}"
+      TZ: ${TIMEZONE:-Europe/Moscow}
+    networks:
+      - todo-net
+
   voice-stt:
     build:
       context: ../src/stt
@@ -170,6 +186,62 @@ services:
     networks:
       - todo-net
 
+  taskmanager:
+    build:
+      context: ../src/TaskManager
+      dockerfile: Dockerfile
+    container_name: todo-taskmanager
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:${TASKMANAGER_PORT:-5000}:8080"
+    environment:
+      ASPNETCORE_HTTP_PORTS: "8080"
+      TASKMANAGER_CONNECTION_STRING: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-todo};Username=${POSTGRES_USER:-todo};Password=${POSTGRES_PASSWORD:-todo}"
+      STT_BASE_URL: http://voice-stt:8010
+      NLU_BASE_URL: http://voice-nlu:8001
+      TTS_BASE_URL: http://voice-tts:8020
+      STT_LANGUAGE: ${STT_LANGUAGE:-ru}
+      STT_TIMEOUT: ${STT_DEADLINE_SECONDS:-25}
+      NLU_TIMEOUT: ${LLM_TIMEOUT:-20}
+      TTS_TIMEOUT: ${TTS_TIMEOUT_SECONDS:-20}
+      TTS_VOICE: ${TTS_DEFAULT_VOICE:-ru-RU-SvetlanaNeural}
+      TTS_FORMAT: ${TTS_DEFAULT_FORMAT:-mp3}
+      TIMEZONE: ${TIMEZONE:-Europe/Moscow}
+      TZ: ${TIMEZONE:-Europe/Moscow}
+      # TaskManager только подписывает presigned URL; сетевых вызовов S3 нет.
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-todo-s3}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-todo-s3-secret}
+      S3_BUCKET_AUDIO: ${S3_BUCKET_AUDIO:-audio}
+      S3_BUCKET_TTS: ${S3_BUCKET_TTS:-tts}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_PRESIGN_TTL_UPLOAD: ${S3_PRESIGN_TTL_UPLOAD:-600}
+      S3_PRESIGN_TTL_DOWNLOAD: ${S3_PRESIGN_TTL_DOWNLOAD:-900}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
+      taskmanager-migrate:
+        condition: service_completed_successfully
+      voice-stt:
+        condition: service_healthy
+      voice-tts:
+        condition: service_healthy
+      voice-nlu:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v1/health >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 60s
+    networks:
+      - todo-net
+
   web:
     build:
       context: ../src/web
@@ -181,11 +253,10 @@ services:
     ports:
       - "127.0.0.1:${WEB_PORT:-8080}:80"
     environment:
-      # TaskManager пока запускается на хосте; после его контейнеризации
-      # задайте TASKMANAGER_URL=http://taskmanager:8080.
-      TASKMANAGER_URL: ${TASKMANAGER_URL:-http://host.docker.internal:5000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      TASKMANAGER_URL: ${TASKMANAGER_URL:-http://taskmanager:8080}
+    depends_on:
+      taskmanager:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null"]
       interval: 10s
