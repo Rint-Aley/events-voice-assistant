@@ -61,6 +61,8 @@ TaskManager не распознаёт речь, не разбирает текс
 src/
   TaskManager/
     TaskManager.sln
+    Dockerfile
+    .dockerignore
     TaskManager.SharedKernel/
     TaskManager.Application.Abstractions/
     Modules/
@@ -87,6 +89,9 @@ src/
 
 `src/TaskManager/` — корень бэкенда. Рядом в `src/` лежат остальные сервисы
 (`tts`, `stt`, `nlu`, `web`), поэтому проекты бэкенда нельзя создавать прямо в `src/`.
+Dockerfile собирает `TaskManager.Api`; внутри контейнера API слушает `8080`, наружу
+проброшен `TASKMANAGER_PORT` (по умолчанию `5000`). EF-миграции применяет one-shot
+`taskmanager-migrate` до старта API.
 
 Правила раскладки:
 

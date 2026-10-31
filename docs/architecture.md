@@ -103,7 +103,7 @@ TaskManager — **один** деплой-юнит. Внутри два моду
     tts.request.json  tts.response.json
     archive/            # схемы брокера, не используются
 /src
-  TaskManager/        # .NET backend: solution, projects, tests
+  TaskManager/        # .NET backend: solution, projects, tests, Dockerfile
   # stt/tts/nlu/web — отдельные единицы сборки:
   # Dockerfile, requirements.txt и исходники внутри папки сервиса
   stt/  tts/  nlu/  web/

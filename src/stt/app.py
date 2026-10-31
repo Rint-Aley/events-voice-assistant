@@ -81,13 +81,82 @@ def health_check():
     return {"status": "ok"}
 
 
-def _probe_duration_ms_sync(path: str) -> int:
+def _parse_seconds(raw: str) -> float | None:
+    """Разбирает значение секунд из ffprobe. Пустое, N/A и NaN дают None."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        seconds = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(seconds):
+        return None
+    return seconds
+
+
+def _parse_duration_ms(raw: str) -> int | None:
+    """Длительность из format=duration. Ноль и отрицательные значения невалидны."""
+    seconds = _parse_seconds(raw)
+    if seconds is None or seconds <= 0:
+        return None
+    return int(round(seconds * 1000))
+
+
+def _parse_packet_duration_ms(output: str) -> int | None:
+    """
+    Длительность по аудиопакетам: максимум (pts_time + duration_time).
+
+    Нужна для WebM от MediaRecorder, где format=duration часто отсутствует.
+    Строки с невалидным pts пропускаются; отсутствующая duration_time считается нулём.
+    """
+    best_ms = None
+    for line in output.splitlines():
+        fields = line.strip().split(",")
+        if len(fields) < 2:
+            continue
+
+        pts = _parse_seconds(fields[0])
+        duration = _parse_seconds(fields[1])
+        if pts is None or pts < 0:
+            continue
+
+        end_ms = int(round((pts + max(duration or 0.0, 0.0)) * 1000))
+        if end_ms > 0 and (best_ms is None or end_ms > best_ms):
+            best_ms = end_ms
+    return best_ms
+
+
+def _run_ffprobe(args: list[str]) -> str:
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1",
-         path],
-        capture_output=True, text=True, check=True,
+        ["ffprobe", "-v", "error", *args],
+        capture_output=True, text=True, check=False,
     )
-    return int(float(result.stdout.strip() or "0") * 1000)
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _probe_duration_ms_sync(path: str) -> int:
+    format_output = _run_ffprobe([
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        path,
+    ])
+    duration_ms = _parse_duration_ms(format_output)
+    if duration_ms is not None:
+        return duration_ms
+
+    # WebM без duration metadata: берём конец последнего аудиопакета.
+    packet_output = _run_ffprobe([
+        "-select_streams", "a:0",
+        "-show_entries", "packet=pts_time,duration_time",
+        "-of", "csv=p=0",
+        path,
+    ])
+    duration_ms = _parse_packet_duration_ms(packet_output)
+    if duration_ms is not None:
+        return duration_ms
+
+    raise ValueError("Не удалось определить длительность (битый файл)")
 
 
 async def _probe_duration_ms(path: str) -> int | None:

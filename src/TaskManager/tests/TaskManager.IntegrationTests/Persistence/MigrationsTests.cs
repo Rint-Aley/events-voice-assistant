@@ -29,6 +29,7 @@ public sealed class MigrationsTests : IAsyncLifetime
         // Assert
         var appliedMigrations = await dbContext.Database.GetAppliedMigrationsAsync();
         appliedMigrations.Should().Contain("20261030141449_InitialPersistence");
+        appliedMigrations.Should().BeEquivalentTo(dbContext.Database.GetMigrations());
 
         var tableNames = await ReadStringsAsync(
             dbContext,
@@ -70,6 +71,7 @@ public sealed class MigrationsTests : IAsyncLifetime
             "source_text:text:YES",
             "clarification_round:integer:NO",
             "is_deadline:boolean:NO",
+            "embedding:vector:YES",
         ]);
 
         var answerColumns = await ReadColumnsAsync(dbContext, "answers");
@@ -82,22 +84,24 @@ public sealed class MigrationsTests : IAsyncLifetime
         var commandColumns = await ReadColumnsAsync(dbContext, "domain_commands");
         commandColumns.Should().Contain("payload:jsonb:NO");
 
-        var embeddingType = await ReadStringsAsync(
+        var embeddingTypes = await ReadStringsAsync(
             dbContext,
             """
             select format_type(attribute.atttypid, attribute.atttypmod) as "Value"
             from pg_attribute attribute
             join pg_class table_info on table_info.oid = attribute.attrelid
-            where table_info.relname = 'events'
+            where table_info.relname in ('events', 'drafts')
               and attribute.attname = 'embedding'
               and not attribute.attisdropped
             """);
 
-        embeddingType.Should().ContainSingle().Which.Should().Be("vector");
+        embeddingTypes.Should().HaveCount(2).And.OnlyContain(type => type == "vector(1536)");
 
         var eventIndexes = await ReadIndexDefinitionsAsync(dbContext, "events");
-        eventIndexes.Should().NotContain(
-            definition => definition.Contains("hnsw", StringComparison.OrdinalIgnoreCase));
+        eventIndexes.Should().Contain(
+            definition => definition.Contains("events_embedding_hnsw", StringComparison.Ordinal)
+                && definition.Contains("hnsw", StringComparison.OrdinalIgnoreCase)
+                && definition.Contains("vector_cosine_ops", StringComparison.Ordinal));
 
         var turnIndexes = await ReadIndexDefinitionsAsync(dbContext, "turns");
         turnIndexes.Should().Contain(

@@ -851,7 +851,7 @@ public sealed class InterpretTurnHandler
             return false;
         }
 
-        return embedding.Dim > 0
+        return embedding.Dim == EventEmbedding.Dimensions
             && embedding.Values.Count == embedding.Dim
             && embedding.Values.All(double.IsFinite);
     }

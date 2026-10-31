@@ -488,7 +488,7 @@ docs/assistant_replies.md.
 
 Прочитай AGENTS.md, docs/task-manager/implementation.md §7.3,
 docs/contracts/stt.*.json, nlu.*.json, tts.*.json, error.json,
-docs/infra.md §4.
+docs/infra.md §5.
 
 Реализуй адаптеры. Не коммить. Не добавляй пакеты без согласования.
 

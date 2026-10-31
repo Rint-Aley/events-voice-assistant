@@ -24,14 +24,15 @@
 ```bash
 dotnet build src/TaskManager/TaskManager.sln
 dotnet test src/TaskManager/TaskManager.sln
+docker compose -f deploy/docker-compose.yml config --quiet
 git diff --check
 ```
 
 Для миграций:
 
 ```bash
-dotnet ef migrations add <Name> --project src/TaskManager/TaskManager.Infrastructure --startup-project src/TaskManager/TaskManager.Api
-dotnet ef database update --project src/TaskManager/TaskManager.Infrastructure --startup-project src/TaskManager/TaskManager.Api
+dotnet ef migrations add <Name> --project src/TaskManager/TaskManager.Infrastructure --startup-project src/TaskManager/TaskManager.Infrastructure
+dotnet ef database update --project src/TaskManager/TaskManager.Infrastructure --startup-project src/TaskManager/TaskManager.Infrastructure
 ```
 
 ## Архитектурные границы

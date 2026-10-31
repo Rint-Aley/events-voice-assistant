@@ -294,8 +294,8 @@ public sealed class ApplyTurnPlanHandler
                 payload.Duration,
                 payload.IsDeadline);
 
-            // Вектор остаётся в payload: до фиксации EMBEDDING_MODEL/EMBEDDING_DIM
-            // Events.Application не принимает embedding и колонка vector(N) не создаётся.
+            // Вектор из payload здесь не используется: Event.Create принимает только слоты,
+            // запись embedding в events — отдельная задача.
 
             Result<Event> validated = Event.Create(
                 create.Kind,

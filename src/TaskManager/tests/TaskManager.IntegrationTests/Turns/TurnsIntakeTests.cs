@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TaskManager.Application.Abstractions;
+using TaskManager.Events.Domain;
 using TaskManager.Turns.Application.Clients.Nlu;
 using TaskManager.Turns.Application.Clients.Stt;
 using TaskManager.Turns.Application.Scenarios;
@@ -722,5 +723,8 @@ public sealed class TurnsIntakeTests : IAsyncLifetime
         Embedding: Embedding());
 
     private static NluEmbedding Embedding() =>
-        new("fake-embedding", 3, [0.1, 0.2, 0.3]);
+        new(
+            EventEmbedding.Model,
+            EventEmbedding.Dimensions,
+            Enumerable.Repeat(0.1, EventEmbedding.Dimensions).ToArray());
 }

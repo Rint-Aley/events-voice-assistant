@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Pgvector;
+using Pgvector.EntityFrameworkCore;
 using TaskManager.Events.Application.Ports;
 using TaskManager.Events.Application.Queries;
 using TaskManager.Events.Domain;
@@ -49,6 +51,46 @@ public sealed class EventQuery : IEventQuery
         var totalCount = rows.Count == 0 ? 0 : rows[0].TotalCount;
 
         return new EventListResult(rows.Select(row => row.Event).ToList(), totalCount);
+    }
+
+    public async Task<IReadOnlyList<Event>> SearchAsync(
+        SearchQuery query,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        if (limit <= 0)
+        {
+            return Array.Empty<Event>();
+        }
+
+        var queryVector = new Vector(query.Embedding.ToArray());
+
+        // Embedding хранится теневым свойством: Domain не знает про pgvector. Записи без
+        // вектора не участвуют в поиске, иначе косинусная близость не определена.
+        IQueryable<Event> events = VisibleEvents()
+            .Where(@event => EF.Property<Vector?>(@event, "Embedding") != null);
+
+        events = ApplyTypeFilter(events, query.TypeFilter);
+
+        if (query.From.HasValue)
+        {
+            events = events.Where(@event => @event.StartsOn >= query.From.Value);
+        }
+
+        if (query.To.HasValue)
+        {
+            events = events.Where(@event => @event.StartsOn <= query.To.Value);
+        }
+
+        // Id — детерминированный tiebreaker для одинаковых расстояний, чтобы выдача не
+        // зависела от плана выполнения HNSW.
+        return await events
+            .OrderBy(@event => EF.Property<Vector?>(@event, "Embedding")!.CosineDistance(queryVector))
+            .ThenBy(@event => @event.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<Event>> ListActiveMeetingCandidatesAsync(

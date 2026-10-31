@@ -10,6 +10,7 @@ using TaskManager.Turns.Application.Scenarios;
 using TaskManager.Turns.Application.Ports;
 using TaskManager.Turns.Domain;
 using TaskManager.IntegrationTests.Turns;
+using Testcontainers.PostgreSql;
 
 namespace TaskManager.IntegrationTests.Infrastructure;
 
@@ -53,6 +54,52 @@ public sealed class QuartzJobsTests
                 new TriggerQuery { Group = GroupMatcher<TriggerKey>.GroupEquals("turns") });
             triggers.Items.Should().ContainSingle();
             triggers.Items[0].Key.Should().Be(new TriggerKey($"stt:{turnId}", "turns"));
+        }
+        finally
+        {
+            await scheduler.Shutdown();
+        }
+    }
+
+    [Fact]
+    public async Task ScheduleAsync_with_persistent_store_accepts_guid_target()
+    {
+        // Arrange
+        await using PostgreSqlContainer postgres =
+            new PostgreSqlBuilder("pgvector/pgvector:0.8.7-pg17").Build();
+        await postgres.StartAsync();
+
+        IScheduler scheduler = await QuartzSchedulerBuilder
+            .Create(quartz =>
+            {
+                quartz.UsePersistentStore(store =>
+                {
+                    store.UsePostgres(postgres.GetConnectionString());
+                    store.ConfigureStore(jobStore =>
+                    {
+                        jobStore.TablePrefix = "qrtz_";
+                        jobStore.StoreJobDataAsStrings = true;
+                    });
+                    store.ProvisionSchema();
+                });
+            })
+            .BuildScheduler();
+        var adapter = new QuartzJobScheduler(
+            scheduler,
+            new QuartzJobSchedulerOptions
+            {
+                MaxAttempts = 3,
+                RetryDelay = TimeSpan.FromMilliseconds(100),
+            });
+        Guid turnId = Guid.NewGuid();
+
+        try
+        {
+            // Act
+            await adapter.ScheduleAsync(JobKind.Nlu, turnId);
+
+            // Assert
+            (await adapter.ExistsAsync(JobKind.Nlu, turnId)).Should().BeTrue();
         }
         finally
         {
@@ -167,7 +214,7 @@ public sealed class QuartzJobsTests
         var context = Substitute.For<IJobExecutionContext>();
         context.MergedJobDataMap.Returns(new JobDataMap
         {
-            ["target_id"] = answerId,
+            ["target_id"] = answerId.ToString("D"),
             ["kind"] = JobKind.Tts.ToString(),
         });
 
@@ -212,7 +259,7 @@ public sealed class QuartzJobsTests
         var context = Substitute.For<IJobExecutionContext>();
         context.MergedJobDataMap.Returns(new JobDataMap
         {
-            ["target_id"] = turn.Id,
+            ["target_id"] = turn.Id.ToString("D"),
             ["kind"] = kind.ToString(),
         });
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Quartz;
 using TaskManager.Application.Abstractions;
+using TaskManager.Events.Domain;
 using TaskManager.Infrastructure.Jobs;
 using TaskManager.Infrastructure.Persistence;
 using TaskManager.Turns.Application.Clients.Nlu;
@@ -202,7 +203,10 @@ public sealed class QuartzRetryE2ETests : IAsyncLifetime
             "create_task",
             0.9,
             new NluEntities(Description: "купить хлеб"),
-            Embedding: new NluEmbedding("fake-embedding", 3, [0.1, 0.2, 0.3]));
+            Embedding: new NluEmbedding(
+                EventEmbedding.Model,
+                EventEmbedding.Dimensions,
+                Enumerable.Repeat(0.1, EventEmbedding.Dimensions).ToArray()));
 
         Guid turnId = await SubmitTextAsync(harness);
 
