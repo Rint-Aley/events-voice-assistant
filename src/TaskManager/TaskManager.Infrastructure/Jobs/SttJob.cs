@@ -51,6 +51,12 @@ public sealed class SttJob : IJob
         }
         catch (Exception error) when (JobFailureClassifier.IsPermanent(error))
         {
+            // Пользователь видит общий текст, но причина должна остаться в логах.
+            _logger.LogWarning(
+                "stt for turn {TurnId} failed permanently: {Message}",
+                turnId,
+                error.Message);
+
             await _finalizer.HandleAsync(JobKind.Stt, turnId, cancellationToken);
         }
     }

@@ -15,7 +15,7 @@
   - 400 `BAD_REQUEST` - невалидная схема запроса.
   - 413 `PAYLOAD_TOO_LARGE` - файл больше 10 МБ.
   - 422 `AUDIO_TOO_LONG` - превышена длительность.
-  - 422 `AUDIO_UNREADABLE` - битая ссылка (4xx от S3), пустой файл или файл не является аудио.
+  - 422 `AUDIO_UNREADABLE` - битая ссылка (4xx от S3), пустой файл, файл не является аудио или длительность не удалось определить ни по `format=duration`, ни по packet timestamps.
   - 503 `PROVIDER_UNAVAILABLE` - сетевой сбой, таймаут или 5xx от S3.
   - 504 `DEADLINE_EXCEEDED` - превышен общий дедлайн обработки.
 
@@ -23,7 +23,7 @@
 - **Провайдер:** `faster-whisper` (модель `base`, CPU, int8).
 - **Загрузка модели:** выполняется в `lifespan`. Healthcheck не пропускает трафик, пока модель не загружена в память.
 - **Скачивание:** реализовано через стриминг с жестким лимитом 10 МБ (защита от OOM). Поддерживает редиректы (`follow_redirects=True`). При превышении лимита возвращается `413`.
-- **Проверка длительности:** `ffprobe` вызывается до запуска Whisper. Если `ffprobe` не может прочитать файл, возвращается `AUDIO_UNREADABLE` без запуска нейросети (экономия CPU).
+- **Проверка длительности:** `ffprobe` вызывается до запуска Whisper. Сначала читается `format=duration`. Для WebM от MediaRecorder duration в заголовке контейнера часто отсутствует, поэтому при пустом значении, `N/A`, `NaN` или неположительном числе используется fallback по packet timestamps: `ffprobe -select_streams a:0 -show_entries packet=pts_time,duration_time`, длительность — максимум `pts_time + duration_time` по аудиопакетам. Такой WebM не считается `AUDIO_UNREADABLE`, если аудиопакеты читаются. Только если обе проверки не дали валидной длительности, возвращается `AUDIO_UNREADABLE` без запуска нейросети (экономия CPU).
 - **VAD-фильтр:** параметр `vad_filter=True` отсекает тишину и предотвращает галлюцинации Whisper.
 - **Confidence:** рассчитывается как экспонента от среднего логарифма вероятности (`exp(avg_logprob)`), результат ограничивается диапазоном [0, 1].
 - **Изоляция:** вызовы `ffprobe` и `model.transcribe` обернуты в `asyncio.to_thread`. Для защиты от зомби-потоков при таймауте наложен семафор `asyncio.Semaphore(2)`.
@@ -53,10 +53,13 @@ curl -X POST http://127.0.0.1:8010/v1/transcribe \
 curl -X POST http://127.0.0.1:8010/v1/transcribe \
   -H "Content-Type: application/json" \
   -d '{"turn_id":"11111111-1111-1111-1111-111111111111","audio_url":"http://host.docker.internal:8001/missing.wav","content_type":"audio/wav"}'
+
+# Регрессионный тест fallback длительности (stdlib unittest, Whisper не загружается)
+cd src/stt && python -m unittest discover -s tests -v
 ```
 
 ## 7. Сборка и запуск
-- **Исходники и файлы сборки:** `src/stt/` (`app.py`, `requirements.txt`, `Dockerfile`, `.dockerignore`).
+- **Исходники и файлы сборки:** `src/stt/` (`app.py`, `requirements.txt`, `Dockerfile`, `.dockerignore`, тесты — `tests/`).
 - **Порт:** `8010`.
 - **Docker-образ:** `docker build -t todo-stt src/stt`, запуск — `docker run -p 8010:8010 todo-stt`.
 - **Локальный запуск:** `pip install -r src/stt/requirements.txt`, затем `uvicorn app:app --app-dir src/stt --port 8010`. Нужны установленные `ffmpeg` и `ffprobe`.
