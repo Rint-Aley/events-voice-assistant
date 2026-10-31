@@ -496,7 +496,7 @@ create table events (
     kind            text not null,
     description     text not null,              -- заголовок, обязателен
     source_text     text,                       -- исходные фразы пользователя
-    embedding       vector,                     -- TBD(BLOCKING): размерность после выбора модели
+    embedding       vector(1536),               -- text-embedding-3-small
     embedding_model text,
     starts_on       date,
     starts_at       time,                       -- локальное время в TIMEZONE
@@ -524,8 +524,7 @@ create table events (
 create index events_by_date on events (starts_on, starts_at);
 create index events_by_status on events (status, starts_on);
 create index events_by_source_turn on events (source_turn_id);
--- create index events_embedding_hnsw on events using hnsw (embedding vector_cosine_ops);
--- ^ выполнить только после фиксации EMBEDDING_MODEL и EMBEDDING_DIM
+create index events_embedding_hnsw on events using hnsw (embedding vector_cosine_ops);
 ```
 
 Правила:
@@ -552,7 +551,7 @@ create table drafts (
     kind                 text,
     description          text,
     source_text          text,
-    embedding            vector,                -- TBD(BLOCKING), как у events
+    embedding            vector(1536),          -- как у events
     starts_on            date,
     starts_at            time,
     duration             interval,
@@ -617,8 +616,8 @@ create table answer_events (
 
 - Вектор приходит от `nlu` и сохраняется как есть, без пересчёта. Эмбеддинг считается
   только по `description`; `source_text` для вектора не используется.
-- `EMBEDDING_MODEL` и `EMBEDDING_DIM` — `TBD(BLOCKING)`. До их фиксации не создавать
-  `vector(N)` и HNSW-индекс.
+- `EMBEDDING_MODEL=text-embedding-3-small`, `EMBEDDING_DIM=1536` — зафиксированы;
+  колонка `vector(1536)` и HNSW-индекс создаются миграцией.
 - Поиск: `order by embedding <=> :query_vector`, фильтр `status in ('active', 'done')`,
   `cancelled` исключён, лимит 3.
 - `type_filter`: `meeting` — только встречи; `task` — задачи и напоминания;
@@ -733,8 +732,8 @@ HTTP-ошибки (до создания хода): `BAD_REQUEST`, `UNSUPPORTED_
 | `APPLY_TICK_SECONDS` | период применения команд | `1` |
 | `RECONCILE_SECONDS` | период сверки | `10` |
 | `AUDIO_RETENTION_DAYS` | срок жизни аудио в S3 | `7` |
-| `EMBEDDING_MODEL` | модель эмбеддингов | `TBD(BLOCKING)` |
-| `EMBEDDING_DIM` | размерность вектора | `TBD(BLOCKING)` |
+| `EMBEDDING_MODEL` | модель эмбеддингов | `text-embedding-3-small` |
+| `EMBEDDING_DIM` | размерность вектора | `1536` |
 | `SSE_AUDIO_WAIT_SECONDS` | сколько держать SSE после ответа | `30` |
 | `PRESIGN_TTL_SECONDS` | TTL ссылок S3 | `600` / `900` |
 
@@ -780,8 +779,7 @@ HTTP-ошибки (до создания хода): `BAD_REQUEST`, `UNSUPPORTED_
 18. `tts` отвечает `500` трижды → `COMPLETED`, `audio_status = failed`.
 19. Второе сообщение при активном ходе → `409 SESSION_BUSY`.
 
-Семантический поиск с `vector(N)` блокируется до фиксации `EMBEDDING_MODEL` и
-`EMBEDDING_DIM`.
+Семантический поиск проверяется на реальном Postgres/pgvector (`vector(1536)`).
 
 Ручной сценарий — четыре обязательных кейса из ТЗ: создание задачи/напоминания, создание
 встречи, выборка за период, поиск; плюс относительные даты («завтра», «в пятницу») и
@@ -794,7 +792,7 @@ HTTP-ошибки (до создания хода): `BAD_REQUEST`, `UNSUPPORTED_
 - доставка напоминаний (MVP только сохраняет время);
 - редактирование, удаление, отметка выполнения; переключение статусов — LATER;
 - повторяющиеся события;
-- выбор модели эмбеддингов и размерности — `TBD(BLOCKING)`;
+- смена модели эмбеддингов и переиндексация — LATER;
 - мультипользовательность: таблица `sessions`, реальные `session_id`/`user_id`;
 - журнал SSE-событий и честный replay по `Last-Event-ID`;
 - гибридный поиск и пороги отсечения;

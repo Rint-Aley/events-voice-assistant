@@ -43,13 +43,13 @@
 | 10 | Quartz | 08 |
 | 11 | API + SSE | 09, 10 |
 | 12 | E2E integration tests | 11 |
-| 13 | Vector search | TBD по embedding |
+| 13 | Vector search | после 12 |
 | 14 | Ручной review | после задачи |
 | 15 | Исправление findings | после review |
 | 16 | Handoff в следующую сессию | в конце задачи |
 
 `03` и `04` можно делать параллельно. `09` и `10` тоже можно параллельно после `08`.
-`13` нельзя начинать до фиксации `EMBEDDING_MODEL` и `EMBEDDING_DIM`.
+`13` использует `vector(1536)` и HNSW; модель `text-embedding-3-small` зафиксирована.
 
 ---
 
@@ -319,8 +319,8 @@ docs/task-manager/task-manager.md §7.
 - events.starts_at time без зоны;
 - events.duration interval, только для встреч;
 - events.is_deadline boolean, только для task;
-- events.embedding vector без размерности;
-- HNSW-индекс не создавать;
+- events.embedding vector(1536);
+- HNSW-индекс events_embedding_hnsw;
 - drafts.source_text, drafts.clarification_round, drafts.is_deadline;
 - answers.total_count, answers.warnings;
 - turns.state_version для CAS;
@@ -364,10 +364,8 @@ docs/task-manager/task-manager.md §7.8, docs/contracts/http-api.md.
 - DTO/команды и ручной маппинг, без AutoMapper.
 
 Search:
-- если EMBEDDING_MODEL и EMBEDDING_DIM уже зафиксированы — реализуй семантический
-  поиск top-3 с фильтрами type_filter и периодом;
-- если нет — не реализуй Search и не создавай фейковую заглушку. Сообщи, что задача
-  заблокирована TBD.
+- реализуй семантический поиск top-3 с фильтрами type_filter и периодом;
+- колонка events.embedding vector(1536), HNSW-индекс, косинусная близость.
 
 Интеграционные тесты с реальным Postgres:
 - создание task/reminder/meeting;
@@ -634,7 +632,7 @@ docs/task-manager/task-manager.md §12, docs/contracts/http-api.md.
 - STT/NLU/TTS/S3/Quartz — fakes;
 - не подменяй Postgres на in-memory;
 - если тест находит баг — исправляй минимально, не расширяй задачу;
-- семантический поиск с vector(N) не тестируй до TBD.
+- семантический поиск тестируй на реальном Postgres/pgvector.
 
 Проверка: dotnet build src/TaskManager/TaskManager.sln, dotnet test src/TaskManager/TaskManager.sln, git diff --check.
 В конце отчитайся: список тестов, найденные баги, результаты.
@@ -642,14 +640,12 @@ docs/task-manager/task-manager.md §12, docs/contracts/http-api.md.
 
 ---
 
-## 13. Vector search — только после TBD
+## 13. Vector search
 
 ```text
-Не начинай эту задачу, пока не зафиксированы EMBEDDING_MODEL и EMBEDDING_DIM.
-Если они всё ещё TBD(BLOCKING) — остановись и сообщи об этом.
+Модель зафиксирована: text-embedding-3-small, размерность 1536.
 
-После фиксации:
-- добавь миграцию events.embedding vector(N);
+- добавь миграцию events.embedding vector(1536);
 - добавь HNSW-индекс;
 - реализуй Search в Events.Application: top-3, active + done, cancelled исключён;
 - поддержи type_filter и необязательный период;
@@ -683,7 +679,7 @@ docs/task-manager/task-manager.md §12, docs/contracts/http-api.md.
 3. Поведение: обязательный заголовок; clarify максимум 2 раунда; отмена черновика;
    лимит 3; «Без даты»; type_filter; конфликты встреч; NLU_FAILED; retry 4xx/5xx.
 4. Тесты: unit только Domain; интеграционные с Testcontainers; edge cases.
-5. Миграции: один DbContext, один migration history, без vector(N)/HNSW до TBD.
+5. Миграции: один DbContext, один migration history, `vector(1536)` и HNSW соответствуют `EMBEDDING_DIM`.
 6. Ошибки: коды не переименованы, формат error.json не изменён.
 
 Верни только findings:

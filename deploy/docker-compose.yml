@@ -140,6 +140,36 @@ services:
     networks:
       - todo-net
 
+  voice-nlu:
+    build:
+      context: ../src/nlu
+      dockerfile: Dockerfile
+    container_name: voice-nlu
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${NLU_PORT:-8001}:8001"
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-20}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://api.openai.com/v1}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
+      RULES_ONLY: ${RULES_ONLY:-false}
+      TIMEZONE: ${TIMEZONE:-Europe/Moscow}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - todo-net
+
   web:
     build:
       context: ../src/web
