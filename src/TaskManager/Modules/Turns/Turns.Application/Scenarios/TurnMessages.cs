@@ -11,6 +11,8 @@ public static class TurnMessages
     public const string ClarificationExhausted =
         "Не удалось уточнить. Сформулируй запрос иначе.";
 
+    public const string SearchEmpty = "Ничего похожего не нашла. Попробуй другие слова.";
+
     public const string DescriptionQuestion = "Что записать?";
 
     public const string InvalidDateQuestion =

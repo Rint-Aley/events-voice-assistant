@@ -665,5 +665,8 @@ public sealed class TurnsApplyTests : IAsyncLifetime
             TypeFilter: typeFilter));
 
     private static NluEmbedding Embedding() =>
-        new("fake-embedding", 3, [0.1, 0.2, 0.3]);
+        new(
+            EventEmbedding.Model,
+            EventEmbedding.Dimensions,
+            Enumerable.Repeat(0.1, EventEmbedding.Dimensions).ToArray());
 }

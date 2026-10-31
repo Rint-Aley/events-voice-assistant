@@ -48,7 +48,7 @@ namespace TaskManager.Infrastructure.Persistence.Migrations
                         .HasColumnName("duration");
 
                     b.Property<Vector>("Embedding")
-                        .HasColumnType("vector")
+                        .HasColumnType("vector(1536)")
                         .HasColumnName("embedding");
 
                     b.Property<string>("EmbeddingModel")
@@ -103,6 +103,12 @@ namespace TaskManager.Infrastructure.Persistence.Migrations
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Embedding")
+                        .HasDatabaseName("events_embedding_hnsw");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
 
                     b.HasIndex("SourceTurnId")
                         .HasDatabaseName("events_by_source_turn");
@@ -326,7 +332,7 @@ namespace TaskManager.Infrastructure.Persistence.Migrations
                         .HasColumnName("duration");
 
                     b.Property<Vector>("Embedding")
-                        .HasColumnType("vector")
+                        .HasColumnType("vector(1536)")
                         .HasColumnName("embedding");
 
                     b.Property<bool>("IsDeadline")

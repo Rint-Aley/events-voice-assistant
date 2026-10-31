@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Pgvector;
+using TaskManager.Events.Domain;
 using TaskManager.Turns.Domain;
 
 namespace TaskManager.Infrastructure.Persistence.Configurations;
@@ -78,10 +79,11 @@ internal sealed class DraftConfiguration : IEntityTypeConfiguration<Draft>
             .HasDefaultValueSql("now()")
             .IsRequired();
 
-        // Размерность не фиксируется до выбора EMBEDDING_MODEL/EMBEDDING_DIM.
+        // Черновик хранит вектор в том же формате, что и events: при переносе в запись
+        // размерность обязана совпадать, иначе PostgreSQL отклонит вставку.
         builder.Property<Vector?>("Embedding")
             .HasColumnName("embedding")
-            .HasColumnType("vector");
+            .HasColumnType($"vector({EventEmbedding.Dimensions})");
 
         builder.HasOne<Turn>()
             .WithOne(turn => turn.Draft)

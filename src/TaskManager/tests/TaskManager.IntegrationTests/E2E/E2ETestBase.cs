@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using TaskManager.Application.Abstractions;
+using TaskManager.Events.Domain;
 using TaskManager.IntegrationTests.Api;
 using TaskManager.SharedKernel;
 using TaskManager.Turns.Application.Clients.Nlu;
@@ -23,7 +24,10 @@ public abstract class E2ETestBase : ApiTestBase
     }
 
     protected static NluEmbedding Embedding() =>
-        new("fake-embedding", 3, [0.1, 0.2, 0.3]);
+        new(
+            EventEmbedding.Model,
+            EventEmbedding.Dimensions,
+            Enumerable.Repeat(0.1, EventEmbedding.Dimensions).ToArray());
 
     protected async Task<Result<InterpretTurnResult>> RunNluJobAsync(Guid turnId)
     {

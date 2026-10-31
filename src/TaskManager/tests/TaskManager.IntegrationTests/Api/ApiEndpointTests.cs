@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TaskManager.Application.Abstractions;
+using TaskManager.Events.Domain;
 using TaskManager.Infrastructure.Persistence;
 using TaskManager.Turns.Application.Clients.Nlu;
 using TaskManager.Turns.Application.Clients.Stt;
@@ -186,7 +187,10 @@ public sealed class ApiEndpointTests(ApiTestFixture fixture) : ApiTestBase(fixtu
             "create_meeting",
             0.9,
             new NluEntities(Description: "встреча с командой"),
-            Embedding: new NluEmbedding("e5", 3, [0.1, 0.2, 0.3]));
+            Embedding: new NluEmbedding(
+                EventEmbedding.Model,
+                EventEmbedding.Dimensions,
+                Enumerable.Repeat(0.1, EventEmbedding.Dimensions).ToArray()));
 
         InterpretTurnResult interpreted = await WithScopeAsync(async provider =>
         {
@@ -232,7 +236,10 @@ public sealed class ApiEndpointTests(ApiTestFixture fixture) : ApiTestBase(fixtu
             "create_task",
             0.9,
             new NluEntities(Description: "купить хлеб"),
-            Embedding: new NluEmbedding("e5", 3, [0.1, 0.2, 0.3]));
+            Embedding: new NluEmbedding(
+                EventEmbedding.Model,
+                EventEmbedding.Dimensions,
+                Enumerable.Repeat(0.1, EventEmbedding.Dimensions).ToArray()));
 
         // Act
         await WithScopeAsync(async provider =>

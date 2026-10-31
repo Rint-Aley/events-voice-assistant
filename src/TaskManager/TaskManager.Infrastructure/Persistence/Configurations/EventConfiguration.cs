@@ -77,10 +77,10 @@ internal sealed class EventConfiguration : IEntityTypeConfiguration<Event>
         builder.Property(@event => @event.SourceText)
             .HasColumnName("source_text");
 
-        // Размерность не фиксируется до выбора EMBEDDING_MODEL/EMBEDDING_DIM.
+        // Модель и размерность зафиксированы: text-embedding-3-small, 1536.
         builder.Property<Vector?>("Embedding")
             .HasColumnName("embedding")
-            .HasColumnType("vector");
+            .HasColumnType($"vector({EventEmbedding.Dimensions})");
 
         builder.Property<string?>("EmbeddingModel")
             .HasColumnName("embedding_model");
@@ -128,6 +128,12 @@ internal sealed class EventConfiguration : IEntityTypeConfiguration<Event>
 
         builder.HasIndex("SourceTurnId")
             .HasDatabaseName("events_by_source_turn");
+
+        // Поиск идёт по косинусной близости, поэтому индекс — HNSW с vector_cosine_ops.
+        builder.HasIndex("Embedding")
+            .HasDatabaseName("events_embedding_hnsw")
+            .HasMethod("hnsw")
+            .HasOperators("vector_cosine_ops");
 
         builder.Ignore(@event => @event.IsVisible);
         builder.Ignore(@event => @event.Start);

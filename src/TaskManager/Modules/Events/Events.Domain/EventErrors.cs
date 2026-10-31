@@ -52,4 +52,8 @@ public static class EventErrors
     public static DomainError InvalidPeriod { get; } = DomainError.Expected(
         "INVALID_PERIOD",
         "Начало периода позже его конца.");
+
+    public static DomainError InvalidEmbedding { get; } = DomainError.Expected(
+        "INVALID_EMBEDDING",
+        $"Вектор должен содержать {EventEmbedding.Dimensions} конечных чисел.");
 }

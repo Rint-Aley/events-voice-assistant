@@ -4,8 +4,7 @@ using TaskManager.Events.Domain;
 namespace TaskManager.Events.Application.Ports;
 
 /// <summary>
-/// Чтение событий для списка и проверки конфликтов. Семантический поиск не объявлен:
-/// он заблокирован до фиксации <c>EMBEDDING_MODEL</c> и <c>EMBEDDING_DIM</c>.
+/// Чтение событий для списка, поиска и проверки конфликтов.
 /// </summary>
 public interface IEventQuery
 {
@@ -17,6 +16,19 @@ public interface IEventQuery
         DateOnly from,
         DateOnly to,
         EventTypeFilter? typeFilter,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Семантический поиск по косинусной близости <c>description</c>: только
+    /// <c>active</c> и <c>done</c>, без <c>cancelled</c>. Возвращает до
+    /// <paramref name="limit"/> записей в порядке убывания близости.
+    /// </summary>
+    /// <param name="query">Вектор запроса, фильтр типа и необязательный период.</param>
+    /// <param name="limit">Максимальное число записей.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<IReadOnlyList<Event>> SearchAsync(
+        SearchQuery query,
         int limit,
         CancellationToken cancellationToken = default);
 
