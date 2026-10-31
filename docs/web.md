@@ -3,7 +3,7 @@
 ## Стек и границы
 
 Frontend — адаптивное браузерное приложение на React, TypeScript и Vite; стили изолированы
-CSS Modules, общие дизайн-токены находятся в `frontend/src/index.css`. Это статический
+CSS Modules, общие дизайн-токены находятся в `src/web/src/index.css`. Это статический
 клиент, не отдельное iOS/Android-приложение и не PWA. Клиент не обращается к БД и не вызывает
 STT/NLU/TTS напрямую: все операции идут через TaskManager по контракту
 `docs/contracts/http-api.md`.
@@ -11,7 +11,7 @@ STT/NLU/TTS напрямую: все операции идут через TaskMa
 ## Запуск и конфигурация
 
 ```bash
-cd frontend
+cd src/web
 npm install
 npm run dev
 ```
@@ -28,6 +28,43 @@ npm run build
 Для размещения отдельно от TaskManager настройте URL API и CORS на backend, а также CORS
 хранилища для presigned PUT с домена фронтенда. Микрофон в браузере доступен по HTTPS или на
 `localhost`.
+
+## Docker
+
+```bash
+docker build -t todo-web src/web
+docker run --rm -p 8080:80 -e TASKMANAGER_URL=http://host.docker.internal:8080 todo-web
+```
+
+Образ двухступенчатый: Node собирает статику (`npm ci && npm run build`), nginx раздаёт
+`dist` и проксирует `/api/` на `TASKMANAGER_URL` (по умолчанию `http://taskmanager:8080`).
+`VITE_API_BASE_URL` задаётся на этапе сборки (`--build-arg`, по умолчанию `/api/v1`);
+для SSE проксирование идёт без буферизации. Healthcheck — `GET /healthz`.
+
+Фрагмент для общего `deploy/docker-compose.yml` (имя и порт сервиса TaskManager уточнить
+при его контейнеризации):
+
+```yaml
+  web:
+    build:
+      context: ../src/web
+      args:
+        VITE_API_BASE_URL: /api/v1
+    container_name: todo-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    environment:
+      TASKMANAGER_URL: http://taskmanager:8080
+    depends_on:
+      taskmanager:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+```
 
 ## Потоки
 
