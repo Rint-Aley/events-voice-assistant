@@ -1,5 +1,19 @@
-*.docx
-Testovoe_zadanie_golosovoj_assistent_dlya_zadach_i_261021_115649.pdf
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local config and secrets
+.env
+
+# Local media and manual test artifacts
+storage/
+test.wav
+test_tts.mp3
+body_tts.json
+*.mp3
+*.wav
 
 # .NET build output
 bin/
@@ -30,6 +44,10 @@ coverage/
 *.snupkg
 project.lock.json
 *.binlog
+
+# Documents and other
+*.docx
+Testovoe_zadanie_golosovoj_assistent_dlya_zadach_i_261021_115649.pdf
 
 # Other
 BenchmarkDotNet.Artifacts/
